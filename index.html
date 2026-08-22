@@ -101,7 +101,13 @@
 
   /* header ------------------------------------------------------------- */
   .top{display:flex; flex-wrap:wrap; align-items:center; justify-content:space-between; gap:12px 16px}
-  .wordmark{font-family:var(--mono); font-size:15px; font-weight:600; letter-spacing:.01em}
+  .wordmark{font-family:var(--mono); font-size:15px; font-weight:600; letter-spacing:.01em;
+            display:inline-flex; align-items:center; gap:8px}
+  /* An amphora whose three upward points - the two lips and the string rising
+     out of it - are a trident. Inline SVG, so it costs no image request, which
+     the policy would refuse anyway, and it takes the aquamarine straight from
+     the palette, so it follows the theme with no extra rule. */
+  .wordmark .mark{width:16px; height:23px; flex:none; color:var(--green)}
   .controls{display:flex; flex-wrap:wrap; align-items:center; justify-content:flex-end; gap:10px 16px;
             font-family:var(--mono); font-size:12px; color:var(--muted)}
   select, input{font:inherit; color:var(--text); background:transparent; border:none;
@@ -172,6 +178,8 @@
   .string[data-gauge="6"] em{width:4px} .string[data-gauge="5"] em{width:3.2px}
   .string[data-gauge="4"] em{width:2.5px} .string[data-gauge="3"] em{width:2px}
   .string[data-gauge="2"] em{width:1.4px} .string[data-gauge="1"] em{width:1px}
+  .string.pinned{color:var(--text); border-color:var(--text)}
+  .strings.pinning .string:not(.pinned){opacity:.32}
   .string.live{color:var(--accent); border-color:var(--accent)}
   .string.live.locked{color:var(--green); border-color:var(--green)}
 
@@ -216,7 +224,14 @@
 <main class="shell" id="shell" data-mode="guitar" data-naming="letters">
 
   <header class="top">
-    <span class="wordmark">NepTuner</span>
+    <span class="wordmark">
+      <svg class="mark" viewBox="4 0.5 16 23" fill="none" stroke="currentColor"
+           stroke-linecap="round" aria-hidden="true">
+        <path stroke-width="1.25" d="M5.2 2.6C6.6 6.6 9.4 7.4 9.9 11.2C10.3 13.6 4.9 14.2 4.9 17C4.9 19.6 7.9 20.9 10.2 21
+                                     M18.8 2.6C17.4 6.6 14.6 7.4 14.1 11.2C13.7 13.6 19.1 14.2 19.1 17C19.1 19.6 16.1 20.9 13.8 21
+                                     M10.2 21H13.8M12 1.2V18.6"/>
+        <path stroke-width="1.05" d="M8.8 22.4H15.2"/>
+      </svg>NepTuner</span>
     <div class="controls">
       <span class="pick">
         <select id="lang">
@@ -286,6 +301,10 @@ const TUNINGS = [
   {name:'Open C',           group:'Open',     midi:[36,43,48,55,60,64]},
 ];
 let tuningIndex = 0;
+/* which string you chose by hand, or null for automatic. Choosing one is the
+   only way the tuner can know you mean the 6th when the guitar is still in
+   standard and the target is four semitones below. */
+let pinned = null;
 const tuning = () => TUNINGS[tuningIndex];
 const flatSpelling = () => mode === 'guitar' && !!tuning().flat;
 
@@ -300,17 +319,18 @@ const noteNames = () => flatSpelling()
 
 const I18N = {
   en:{
-    notation:'letters', free:'Free note', inTune:'in tune', sharp:'{n} cents sharp', flat:'{n} cents flat',
+    notation:'letters', free:'Free note', inTune:'in tune', loosen:'loosen {n} cents', tighten:'tighten {n} cents',
     noString:'no string near',
     axSharp:'sharp', axFlat:'flat',
     start:'Start listening', stop:'Stop listening',
-    hintGuitar:'Pluck a string and let it ring. Tap a button to hear its pitch.',
+    hintGuitar:'Pluck a string and let it ring. Tap one below to tune that string alone.',
+    hintPinned:'Tuning the {n} string only. Tap it again for automatic.',
     hintFree:'Play one note at a time. A chord has no single pitch to report.',
     micWait:'Waiting for microphone permission\u2026',
     micDenied:'The tuner needs microphone access. Allow it in your browser\u2019s site settings, then start listening again.',
     micNone:'No microphone available on this device.',
     stopped:'Stopped. Nothing is being recorded or sent anywhere.',
-    aPlay:'Play reference {n}', aRef:'{n}4 reference in hertz',
+    aPick:'Tune the {n} string', aRef:'{n}4 reference in hertz',
     aMeter:'Pitch deviation shown as a flowing current', aLang:'Interface language', aTuning:'Tuning',
     aboutTitle:'How it works, privacy and security',
     about:[
@@ -330,17 +350,18 @@ const I18N = {
     toLight:'Switch to light theme', toDark:'Switch to dark theme',
   },
   es:{
-    notation:'latin', free:'Nota libre', inTune:'afinada', sharp:'{n} cents alta', flat:'{n} cents baja',
+    notation:'latin', free:'Nota libre', inTune:'afinada', loosen:'afloja {n} cents', tighten:'aprieta {n} cents',
     noString:'ninguna cuerda cerca',
     axSharp:'alta', axFlat:'baja',
     start:'Empezar a escuchar', stop:'Dejar de escuchar',
-    hintGuitar:'Pulsa una cuerda y d\u00e9jala sonar. Toca un bot\u00f3n para o\u00edr su tono.',
+    hintGuitar:'Pulsa una cuerda y d\u00e9jala sonar. Toca una abajo para afinar solo esa.',
+    hintPinned:'Afinando solo la cuerda {n}. T\u00f3cala otra vez para volver al autom\u00e1tico.',
     hintFree:'Toca una nota cada vez. Un acorde no tiene un tono \u00fanico.',
     micWait:'Esperando permiso del micr\u00f3fono\u2026',
     micDenied:'El afinador necesita acceso al micr\u00f3fono. Perm\u00edtelo en los ajustes del sitio de tu navegador y vuelve a empezar.',
     micNone:'No hay micr\u00f3fono disponible en este dispositivo.',
     stopped:'Parado. No se graba ni se env\u00eda nada.',
-    aPlay:'Escuchar la referencia {n}', aRef:'referencia {n}4 en hercios',
+    aPick:'Afinar la cuerda {n}', aRef:'referencia {n}4 en hercios',
     aMeter:'Desviaci\u00f3n del tono mostrada como una corriente de agua', aLang:'Idioma de la interfaz', aTuning:'Afinaci\u00f3n',
     aboutTitle:'Informaci\u00f3n sobre funcionamiento, privacidad y seguridad',
     about:[
@@ -368,7 +389,12 @@ const t = key => (I18N[lang] && I18N[lang][key]) || I18N.en[key];
 const MODES = {
   /* C2 is 65.4 Hz, and the 3.5-semitone reach puts a slack one at 53.4 Hz,
      so the floor has to sit below that or Drop C simply never registers */
-  guitar:{ minHz:52, maxHz:450,  lowpass:1100, reach:3.5 },
+  /* The knee has to sit above the top string's harmonics. At 1100 Hz the 4th
+     harmonic of the high E lands right in it and comes out 79 degrees out of
+     phase with the fundamental, while the low E's harmonics shift barely 19.
+     The wave stops resembling itself, which is the one thing YIN measures, so
+     the two thinnest strings simply went undetected. */
+  guitar:{ minHz:52, maxHz:450,  lowpass:1800, reach:3.5 },
   free:  { minHz:60, maxHz:1400, lowpass:2800, reach:Infinity },
 };
 let mode = 'guitar';
@@ -379,8 +405,10 @@ function describe(freq){
   const exact = 69 + 12 * Math.log2(freq / a4);
   let midi;
   if (mode === 'guitar'){
-    midi = tuning().midi.reduce((best, m) =>
-      Math.abs(m - exact) < Math.abs(best - exact) ? m : best);
+    midi = pinned !== null
+      ? tuning().midi[pinned]                    // however far away it is
+      : tuning().midi.reduce((best, m) =>
+          Math.abs(m - exact) < Math.abs(best - exact) ? m : best);
   } else {
     midi = Math.round(exact);
   }
@@ -388,7 +416,7 @@ function describe(freq){
   return {
     midi, exact, pc,
     cents:(exact - midi) * 100,
-    far:Math.abs(exact - midi) > MODES[mode].reach,
+    far:pinned === null && Math.abs(exact - midi) > MODES[mode].reach,
     name:noteNames()[pc],
     alt:naming === 'latin' ? LETTERS[pc] : '',   // shown in brackets, never instead
     octave:Math.floor(midi / 12) - 1,
@@ -400,7 +428,8 @@ function describe(freq){
    cumulative-mean normalisation so the first dip below a threshold is the
    true period rather than a harmonic. Lags are restricted to the mode's
    frequency window so the inner loop fits in an animation frame. */
-const THRESHOLD = 0.12;
+const THRESHOLD = 0.12;   // a dip this deep is certainly the period
+const FALLBACK  = 0.35;   // a shallow one still counts if nothing better exists
 let diff = null, norm = null, cachedTauMax = -1;
 
 function detectPitch(buf, sampleRate, minHz, maxHz){
@@ -434,6 +463,24 @@ function detectPitch(buf, sampleRate, minHz, maxHz){
     if (norm[tau] < THRESHOLD){
       while (tau + 1 <= tauMax && norm[tau + 1] < norm[tau]) tau++;
       found = tau; break;
+    }
+  }
+
+  /* Nothing cleared the threshold. Returning null here is what made a plain
+     steel string read as silence: its dip is shallow, not absent. Take the
+     deepest dip instead, then check whether a whole multiple of that lag dips
+     nearly as deep - an octave error always guesses too high, never too low,
+     so preferring the longest period corrects it. */
+  if (found < 0){
+    let best = tauMin;
+    for (let t = tauMin; t <= tauMax; t++) if (norm[t] < norm[best]) best = t;
+    if (norm[best] < FALLBACK){
+      const ceiling = norm[best] * 1.15;
+      for (const k of [4, 3, 2]){
+        const t = best * k;
+        if (t <= tauMax && norm[t] < ceiling){ best = t; break; }
+      }
+      found = best;
     }
   }
   if (found < 0) return null;
@@ -492,7 +539,7 @@ function loop(time){
   const rms = Math.sqrt(energy / samples.length);
 
   const range = MODES[mode];
-  if (rms > 0.008){
+  if (rms > 0.006){   // a plain high E delivers far less than a wound low E
     const hz = detectPitch(samples, ctx.sampleRate, range.minHz, range.maxHz);
     if (hz && hz >= range.minHz && hz <= range.maxHz){
       history.push(hz);
@@ -668,13 +715,17 @@ function paint(time){
       reading && reading.far ? t('noString')
     : !usable                ? ''
     : locked                 ? t('inTune')
-    : t(reading.cents > 0 ? 'sharp' : 'flat')
+    : t(reading.cents > 0 ? 'loosen' : 'tighten')   // the action, not the diagnosis
         .replace('{n}', Math.abs(Math.round(reading.cents)));
 
   /* which target is live */
+  strings.classList.toggle('pinning', pinned !== null);
   for (const el of document.querySelectorAll('.string')){
-    const on = usable && Number(el.dataset.midi) === reading.midi;
-    el.classList.toggle('live', !!on);
+    const i  = Number(el.dataset.index);
+    const on = pinned !== null ? i === pinned
+             : usable && Number(el.dataset.midi) === reading.midi;
+    el.classList.toggle('pinned', pinned === i);
+    el.classList.toggle('live', !!on && usable);
     el.classList.toggle('locked', !!on && locked);
   }
 }
@@ -723,11 +774,19 @@ const strings = document.getElementById('strings');
 const hint    = document.getElementById('hint');
 const go      = document.getElementById('go');
 
-GAUGES.forEach(g => {
+GAUGES.forEach((g, i) => {
   const b = document.createElement('button');
-  b.className = 'string'; b.dataset.gauge = g;
+  b.className = 'string'; b.dataset.gauge = g; b.dataset.index = i;
   b.innerHTML = '<em></em><span></span>';
-  b.addEventListener('click', () => pluck(Number(b.dataset.midi)));  // pitch changes with the tuning
+  b.addEventListener('click', () => {
+    pinned = pinned === i ? null : i;          // tap it again to go back to automatic
+    history.length = 0; lastHz = null; wake.length = 0;
+    pluck(Number(b.dataset.midi));             // and hear where it is meant to land
+    if (hint.dataset.tone !== 'warn')
+      say(pinned === null ? t('hintGuitar') : t('hintPinned').replace('{n}', b.dataset.label));
+    applyNaming();
+    paint(performance.now());
+  });
   strings.appendChild(b);
 });
 
@@ -781,7 +840,9 @@ function applyNaming(){
     const span = b.querySelector('span');
     span.textContent = primary;                       // clears any previous bracket
     if (bracket) span.appendChild(small(bracket));
-    b.setAttribute('aria-label', t('aPlay').replace('{n}', (primary + ' ' + bracket).trim()));
+    b.dataset.label = (primary + ' ' + bracket).trim();
+    b.setAttribute('aria-label', t('aPick').replace('{n}', b.dataset.label));
+    b.setAttribute('aria-pressed', String(pinned === i));
   });
   renderTunings();
   const refNote = names[9] + '4' + (naming === 'latin' ? ' (A4)' : '');
@@ -820,6 +881,7 @@ function applyLanguage(){
 function selectTarget(value){
   const free = value === 'free';
   if (!free) tuningIndex = Number(value) || 0;
+  pinned = null;                         // a chosen string means nothing in a new tuning
   mode = free ? 'free' : 'guitar';
   shell.dataset.mode = mode;
   strings.hidden = free;                 // the six strings mean nothing in free mode

@@ -4,7 +4,7 @@
    instead of hiding behind the cache until the version name changes. The
    other three files are cache-first, since they rarely change. Offline, both
    fall back to the cache and the app works with no network at all. */
-const CACHE = 'neptuner-v2';
+const CACHE = 'neptuner-v6';
 const FILES = ['./', './index.html', './manifest.webmanifest', './icon.png'];
 
 self.addEventListener('install', event => {
