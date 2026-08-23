@@ -1,7 +1,7 @@
 # NepTuner
 
 A guitar tuner that runs in the browser, installs to the home screen, and works
-with no network at all.
+with no connection at all.
 
 - **Free chromatic note** plus nine preset tunings: E / E♭ / D Standard,
   Drop D, Drop C, Open G, Open D, DADGAD, Open C.
@@ -17,8 +17,10 @@ There is nothing to opt out of, because nothing leaves the device.
 - A `Content-Security-Policy` of `default-src 'none'` and `connect-src 'none'`
   makes the browser enforce that.
 - The microphone feeds the browser audio engine; the analysis runs on device.
-- No cookies, no analytics, no account. One value is stored locally: the
-  chosen theme.
+- No cookies, no analytics, no account, no identifiers.
+- No preference is stored, not even the theme: every launch starts in dark.
+- The app's own four files are stored on the device so it runs offline. Using
+  it sends no request to any server.
 
 ## How it detects the note
 
@@ -33,7 +35,7 @@ instrument's range keeps the room out of it.
 | File | Purpose |
 | --- | --- |
 | `index.html` | the whole app: markup, styles, audio, drawing |
-| `sw.js` | service worker, so it runs offline after one visit |
+| `sw.js` | keeps the four files on the device so the tuner runs offline |
 | `manifest.webmanifest` | name, colours and icon for home-screen install |
 | `icon.png` | 512×512 home-screen icon |
 | `.nojekyll` | tells GitHub Pages to serve the files untouched |
@@ -43,6 +45,6 @@ in a secure context.
 
 ## Updating
 
-Edit the files, then bump `CACHE` in `sw.js` (`neptuner-v2` → `neptuner-v3`).
-The page itself is fetched network-first, so text and layout changes appear on
-the next load; the version bump is what clears the cached icon and manifest.
+Edit the files, raise the number in `CACHE` inside `sw.js`, and upload. A device
+picks the change up the next time the browser checks that file, or immediately
+if the reader presses the update button inside the app.

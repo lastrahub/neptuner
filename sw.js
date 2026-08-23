@@ -1,10 +1,14 @@
-/* Offline cache for NepTuner.
+/* NepTuner offline store.
 
-   The page itself is fetched network-first: an update shows on the next load
-   instead of hiding behind the cache until the version name changes. The
-   other three files are cache-first, since they rarely change. Offline, both
-   fall back to the cache and the app works with no network at all. */
-const CACHE = 'neptuner-v6';
+   The app is four files. They are copied to the device the first time it is
+   opened and served from that copy every time after, so the tuner never asks
+   the network for anything again. That is what lets it work in aeroplane mode,
+   and it also means using it leaves no trail of requests behind.
+
+   To publish a change, raise the number in CACHE. A device picks it up the next
+   time the browser checks this file, or immediately if the reader presses the
+   update button inside the app. */
+const CACHE = 'neptuner-3';
 const FILES = ['./', './index.html', './manifest.webmanifest', './icon.png'];
 
 self.addEventListener('install', event => {
@@ -23,21 +27,16 @@ self.addEventListener('activate', event => {
   );
 });
 
+/* Cache only. The network is reached solely if a file is somehow missing from
+   the store, which for these four cannot happen after a successful install. */
 self.addEventListener('fetch', event => {
-  if (event.request.method !== 'GET') return;
-
-  if (event.request.mode === 'navigate'){
-    event.respondWith(
-      fetch(event.request)
-        .then(response => {
-          const copy = response.clone();
-          caches.open(CACHE).then(cache => cache.put('./index.html', copy)).catch(() => {});
-          return response;
-        })
-        .catch(() => caches.match('./index.html'))
-    );
-    return;
-  }
-
-  event.respondWith(caches.match(event.request).then(hit => hit || fetch(event.request)));
+  const request = event.request;
+  if (request.method !== 'GET') return;
+  event.respondWith((async () => {
+    const cache = await caches.open(CACHE);
+    if (request.mode === 'navigate'){
+      return (await cache.match('./index.html')) || fetch(request);
+    }
+    return (await cache.match(request, { ignoreSearch: true })) || fetch(request);
+  })());
 });

@@ -25,16 +25,6 @@
 <link rel="apple-touch-icon" href="icon.png" />
 <link rel="icon" href="icon.png" />
 <title>NepTuner</title>
-<script>
-  /* runs before first paint so the page never flashes the wrong theme.
-     No stored choice yet: follow the system. */
-  (function(){
-    var saved = null;
-    try { saved = localStorage.getItem('neptuner-theme'); } catch (e) {}
-    var dark = saved ? saved === 'dark' : !matchMedia('(prefers-color-scheme: light)').matches;
-    document.documentElement.dataset.theme = dark ? 'dark' : 'light';
-  })();
-</script>
 <style>
   /* One superfamily, one lifted panel, and exactly two saturated colours -
      both of them states of the string, never decoration. Burgundy is "not
@@ -217,6 +207,20 @@
     letter-spacing:.03em; color:var(--text);
   }
   .about p{margin:0; font-size:12.5px; line-height:1.6; color:var(--muted)}
+  /* Its own row, not inside the panel above: that one explains, this one acts,
+     and an action hidden inside a collapsed explanation cannot be found. Both
+     are set alike so they read as two quiet lines at the foot. */
+  .update{
+    border-top:1px solid var(--line); padding-top:15px; margin-top:2px;
+    display:flex; align-items:baseline; justify-content:space-between; gap:10px 14px; flex-wrap:wrap;
+  }
+  .update button{
+    background:none; border:none; padding:0; cursor:pointer; text-align:left;
+    color:var(--muted); font-family:var(--mono); font-size:11.5px; letter-spacing:.05em;
+    transition:color .18s;
+  }
+  .update button:hover{color:var(--text)}
+  .update span{font-size:12.5px; color:var(--muted); text-align:right}
   .hint[data-tone="warn"]{color:var(--accent)}
 </style>
 </head>
@@ -278,6 +282,11 @@
     <div id="about-body"></div>
   </details>
 
+  <div class="update">
+    <button id="update" type="button"></button>
+    <span id="update-note"></span>
+  </div>
+
 </main>
 
 <script>
@@ -319,7 +328,7 @@ const noteNames = () => flatSpelling()
 
 const I18N = {
   en:{
-    notation:'letters', free:'Free note', inTune:'in tune', loosen:'loosen {n} cents', tighten:'tighten {n} cents',
+    notation:'letters', free:'Free note', inTune:'in tune', settling:'hold\u2026', loosen:'loosen {n} cents', tighten:'tighten {n} cents',
     noString:'no string near',
     axSharp:'sharp', axFlat:'flat',
     start:'Start listening', stop:'Stop listening',
@@ -333,24 +342,31 @@ const I18N = {
     aPick:'Tune the {n} string', aRef:'{n}4 reference in hertz',
     aMeter:'Pitch deviation shown as a flowing current', aLang:'Interface language', aTuning:'Tuning',
     aboutTitle:'How it works, privacy and security',
+    updateBtn:'Check for updates',
+    updateChecking:'Checking\u2026',
+    updateFound:'Update ready. Close the app and open it again.',
+    updateNone:'NepTuner is up to date.',
+    updateFail:'Could not check. This step needs a connection.',
     about:[
       ['The audio stays on the device',
-       'The microphone feeds the browser audio engine and the analysis runs on the phone. The app sends nothing to any server.'],
+       'The microphone feeds the browser audio engine and the pitch is worked out on the phone itself. The app contains no instruction capable of sending anything anywhere: no requests, no connections, no background uploads.'],
       ['No external requests',
-       'No third-party fonts, icons or scripts. A Content-Security-Policy of default-src none and connect-src none blocks any outgoing connection.'],
-      ['No cookies, no analytics',
-       'No account, no identifiers. One value is stored in the browser: the chosen theme, dark or light.'],
-      ['Microphone',
-       'Permission is requested when you press Start listening. The microphone is released when you stop. No audio is recorded.'],
+       'Nothing is loaded from anybody else: no fonts, no icons, no scripts, no analytics. A Content-Security-Policy of default-src none and connect-src none makes the browser refuse any outgoing connection, so this is enforced rather than promised.'],
+      ['No account and no personal data',
+       'No sign-in, no identifiers, no cookies. No preference is kept either: the theme you pick lasts as long as the tab, and every launch starts in dark.'],
+      ['The microphone',
+       'Permission is requested when you press Start listening, and the microphone is released the moment you stop. Audio is never recorded, saved or transmitted.'],
+      ['It works with no connection',
+       'The four files that make up the app are stored on the device the first time you open it, and served from there afterwards. It runs in aeroplane mode, and using it sends no requests to any server. The browser checks for updates on its own at most once a day; the button below checks straight away.'],
       ['How the note is detected',
-       'It analyses about 4,096 samples and looks for the delay at which the wave matches itself. That delay is the period of the string; the frequency and the deviation in cents follow from it.'],
-      ['Offline',
-       'A service worker stores the four files after the first load. It then runs with no network.'],
+       'It analyses about 4,096 samples and looks for the delay at which the wave matches itself. That delay is the period of the string; the frequency and the distance in cents to the target note follow from it.'],
+      ['Why it waits before saying in tune',
+       'A string sounds sharp the instant it is plucked and falls as it settles. The reading counts as in tune only once it has held steady for a moment, so you do not tune to the attack and end up flat.'],
     ],
     toLight:'Switch to light theme', toDark:'Switch to dark theme',
   },
   es:{
-    notation:'latin', free:'Nota libre', inTune:'afinada', loosen:'afloja {n} cents', tighten:'aprieta {n} cents',
+    notation:'latin', free:'Nota libre', inTune:'afinada', settling:'sost\u00e9n\u2026', loosen:'afloja {n} cents', tighten:'aprieta {n} cents',
     noString:'ninguna cuerda cerca',
     axSharp:'alta', axFlat:'baja',
     start:'Empezar a escuchar', stop:'Dejar de escuchar',
@@ -364,19 +380,26 @@ const I18N = {
     aPick:'Afinar la cuerda {n}', aRef:'referencia {n}4 en hercios',
     aMeter:'Desviaci\u00f3n del tono mostrada como una corriente de agua', aLang:'Idioma de la interfaz', aTuning:'Afinaci\u00f3n',
     aboutTitle:'Informaci\u00f3n sobre funcionamiento, privacidad y seguridad',
+    updateBtn:'Comprobar actualizaciones',
+    updateChecking:'Comprobando\u2026',
+    updateFound:'Actualizaci\u00f3n disponible. Cierra la app y vuelve a abrirla.',
+    updateNone:'NepTuner est\u00e1 actualizada.',
+    updateFail:'No se pudo comprobar. Este paso necesita conexi\u00f3n.',
     about:[
       ['El audio no sale del dispositivo',
-       'El micr\u00f3fono va al motor de audio del navegador y el an\u00e1lisis ocurre en el tel\u00e9fono. La app no env\u00eda nada a ning\u00fan servidor.'],
+       'El micr\u00f3fono entra en el motor de audio del navegador y el tono se calcula en el propio tel\u00e9fono. La app no contiene ninguna instrucci\u00f3n capaz de enviar nada a ning\u00fan sitio: ni peticiones, ni conexiones, ni env\u00edos en segundo plano.'],
       ['Sin peticiones externas',
-       'No carga fuentes, iconos ni scripts de terceros. Una Content-Security-Policy con default-src none y connect-src none bloquea cualquier conexi\u00f3n saliente.'],
-      ['Sin cookies ni anal\u00edtica',
-       'No hay cuenta ni identificadores. Se guarda un \u00fanico dato en el navegador: el tema elegido, claro u oscuro.'],
-      ['Micr\u00f3fono',
-       'El permiso se pide al pulsar Empezar a escuchar. Al parar, el micr\u00f3fono se libera. No se graba audio.'],
+       'No se carga nada de terceros: ni fuentes, ni iconos, ni scripts, ni anal\u00edtica. Una Content-Security-Policy con default-src none y connect-src none hace que el navegador rechace cualquier conexi\u00f3n saliente, as\u00ed que est\u00e1 impuesto y no simplemente prometido.'],
+      ['Sin cuenta y sin datos personales',
+       'Ni registro, ni identificadores, ni cookies. Tampoco se guarda ninguna preferencia: el tema que elijas dura lo que dure la pesta\u00f1a, y cada apertura empieza en oscuro.'],
+      ['El micr\u00f3fono',
+       'El permiso se pide al pulsar Empezar a escuchar, y el micr\u00f3fono se libera en cuanto paras. El audio no se graba, ni se guarda, ni se transmite.'],
+      ['Funciona sin conexi\u00f3n',
+       'Los cuatro archivos que forman la app se guardan en el dispositivo la primera vez que la abres, y despu\u00e9s se sirven desde ah\u00ed. Funciona en modo avi\u00f3n, y usarla no env\u00eda ninguna petici\u00f3n a ning\u00fan servidor. El navegador comprueba actualizaciones por su cuenta como mucho una vez al d\u00eda; el bot\u00f3n de abajo lo comprueba al momento.'],
       ['C\u00f3mo detecta la nota',
-       'Analiza unas 4.096 muestras y busca el desfase con el que la onda coincide consigo misma. Ese desfase es el periodo de la cuerda; de ah\u00ed salen la frecuencia y la desviaci\u00f3n en cents.'],
-      ['Sin conexi\u00f3n',
-       'Un service worker guarda los cuatro archivos tras la primera carga. Despu\u00e9s funciona sin red.'],
+       'Analiza unas 4.096 muestras y busca el desfase con el que la onda coincide consigo misma. Ese desfase es el periodo de la cuerda; de ah\u00ed salen la frecuencia y la distancia en cents hasta la nota objetivo.'],
+      ['Por qu\u00e9 espera antes de decir afinada',
+       'Una cuerda suena alta en el momento de pulsarla y va bajando hasta asentarse. La lectura cuenta como afinada solo cuando se ha mantenido estable un instante, para que no afines al ataque y te quedes bajo.'],
     ],
     toLight:'Cambiar al tema claro', toDark:'Cambiar al tema oscuro',
   },
@@ -432,7 +455,7 @@ const THRESHOLD = 0.12;   // a dip this deep is certainly the period
 const FALLBACK  = 0.35;   // a shallow one still counts if nothing better exists
 let diff = null, norm = null, cachedTauMax = -1;
 
-function detectPitch(buf, sampleRate, minHz, maxHz){
+function detectPitch(buf, sampleRate, minHz, maxHz, mayGuess){
   const tauMax = Math.min(Math.floor(sampleRate / minHz), buf.length >> 1);
   const tauMin = Math.max(2, Math.floor(sampleRate / maxHz));
   const window = Math.min(2048, buf.length - tauMax);
@@ -466,22 +489,15 @@ function detectPitch(buf, sampleRate, minHz, maxHz){
     }
   }
 
-  /* Nothing cleared the threshold. Returning null here is what made a plain
-     steel string read as silence: its dip is shallow, not absent. Take the
-     deepest dip instead, then check whether a whole multiple of that lag dips
-     nearly as deep - an octave error always guesses too high, never too low,
-     so preferring the longest period corrects it. */
-  if (found < 0){
+  /* Nothing cleared the threshold. A plain steel string has a shallow dip, not
+     an absent one, so falling back to the deepest dip is what makes the top two
+     strings readable at all. But on a dying note the deepest dip is only the
+     luckiest piece of noise, so the caller allows this while the signal is still
+     strong and forbids it as the note fades. */
+  if (found < 0 && mayGuess){
     let best = tauMin;
     for (let t = tauMin; t <= tauMax; t++) if (norm[t] < norm[best]) best = t;
-    if (norm[best] < FALLBACK){
-      const ceiling = norm[best] * 1.15;
-      for (const k of [4, 3, 2]){
-        const t = best * k;
-        if (t <= tauMax && norm[t] < ceiling){ best = t; break; }
-      }
-      found = best;
-    }
+    if (norm[best] < FALLBACK) found = best;
   }
   if (found < 0) return null;
 
@@ -491,13 +507,54 @@ function detectPitch(buf, sampleRate, minHz, maxHz){
     const denom = 2 * (2 * s1 - s2 - s0);
     if (denom !== 0) period = found + (s2 - s0) / denom;
   }
-  return sampleRate / period;
+  return { hz: sampleRate / period, clarity: 1 - norm[found] };
 }
 
 /* ------------------------------------------------------------------ audio */
 let ctx = null, analyser = null, shimmer = null, samples = null, stream = null, frame = null;
-const HOLD_MS = 1100, history = [];
-let lastHz = null, lastSeen = 0, easedCents = 0;
+/* Two levels, not one. It takes a clear pluck to start trusting a note, but far
+   less to keep following one already found, so the reading stops flickering on
+   and off while the string decays across a single threshold. */
+const RMS_OPEN = 0.010, RMS_HOLD = 0.004;
+const CLARITY_MIN = 0.72;    // below this the waveform is not periodic enough
+const JUMP_CENTS  = 300;     // further than this from the current note is suspect
+/* A freshly plucked string sounds sharp and falls as it settles - measurably,
+   several cents over the first half second. Calling it in tune the instant it
+   crosses the centre means calling it during that fall, and you end up flat.
+   So the lock waits: the note has to stay inside this band for this long. */
+const SETTLE_CENTS = 3, SETTLE_MS = 300;
+const HOLD_MS = 1100, history = [], suspect = [];
+let lastHz = null, lastSeen = 0, easedCents = 0, tracking = false, steadyAt = null;
+let rmsSmooth = 0, attackAt = -1e9;
+
+/* A big jump in pitch is only believable if a string was actually struck. A new
+   note arrives with an attack - the level rises sharply. The other thing that
+   makes the reading leap is one of the five strings you did not play ringing in
+   sympathy: as the note you plucked dies away, that resonance becomes the
+   loudest periodic thing in the room and the detector reports it, faithfully
+   and uselessly. It is a real waveform, so no measure of clarity can catch it.
+   What separates the two is the level: a pluck rises, a resonance only fades.
+   So a jump is accepted near an attack, and ignored while the sound decays. */
+function accept(hz, time){
+  if (lastHz){
+    const jump = Math.abs(1200 * Math.log2(hz / lastHz));
+    if (jump > JUMP_CENTS){
+      if (time - attackAt > 400){ suspect.length = 0; return; }   // no pluck: a leftover
+      suspect.push(hz);
+      if (suspect.length < 3) return;
+      const spread = Math.abs(1200 * Math.log2(suspect[0] / suspect[suspect.length - 1]));
+      if (spread > 120){ suspect.length = 0; return; }   // they disagree: it was noise
+      history.length = 0;                                // they agree: a real change
+    }
+  }
+  suspect.length = 0;
+  history.push(hz);
+  if (history.length > 7) history.shift();
+  const sorted = [...history].sort((a, b) => a - b);
+  lastHz = sorted[sorted.length >> 1];       // the median, never the latest sample
+  lastSeen = time;
+  tracking = true;
+}
 
 async function audio(){
   if (!ctx) ctx = new (window.AudioContext || window.webkitAudioContext)();
@@ -527,7 +584,8 @@ function stop(){
   cancelAnimationFrame(frame); frame = null;
   if (stream) stream.getTracks().forEach(tr => tr.stop());
   stream = null; analyser = null; shimmer = null;
-  lastHz = null; history.length = 0;
+  lastHz = null; tracking = false; history.length = 0; suspect.length = 0;
+  rmsSmooth = 0; attackAt = -1e9;
 }
 
 function loop(time){
@@ -538,18 +596,24 @@ function loop(time){
   for (let i = 0; i < samples.length; i++) energy += samples[i] * samples[i];
   const rms = Math.sqrt(energy / samples.length);
 
-  const range = MODES[mode];
-  if (rms > 0.006){   // a plain high E delivers far less than a wound low E
-    const hz = detectPitch(samples, ctx.sampleRate, range.minHz, range.maxHz);
-    if (hz && hz >= range.minHz && hz <= range.maxHz){
-      history.push(hz);
-      if (history.length > 5) history.shift();
-      const sorted = [...history].sort((a, b) => a - b);
-      lastHz = sorted[sorted.length >> 1];            // median kills octave flickers
-      lastSeen = time;
+  /* an attack is the level climbing sharply out of whatever came before */
+  const before = rmsSmooth;
+  rmsSmooth += (rms - rmsSmooth) * 0.3;
+  if (rmsSmooth > RMS_OPEN && rmsSmooth > before * 1.5) attackAt = time;
+
+  const range  = MODES[mode];
+  const strong = rms > RMS_OPEN;
+  if (rms > (tracking ? RMS_HOLD : RMS_OPEN)){
+    const found = detectPitch(samples, ctx.sampleRate, range.minHz, range.maxHz, strong);
+    if (found && found.clarity >= CLARITY_MIN &&
+        found.hz >= range.minHz && found.hz <= range.maxHz){
+      accept(found.hz, time);
     }
   }
-  if (lastHz && time - lastSeen > HOLD_MS){ lastHz = null; history.length = 0; }
+  if (lastHz && time - lastSeen > HOLD_MS){
+    lastHz = null; tracking = false;
+    history.length = 0; suspect.length = 0;
+  }
   paint(time);
 }
 
@@ -605,7 +669,10 @@ function paint(time){
 
   const reading = lastHz ? describe(lastHz) : null;
   const usable  = reading && !reading.far;
-  const locked  = usable && Math.abs(reading.cents) <= 4;
+  const close   = usable && Math.abs(reading.cents) <= SETTLE_CENTS;
+  if (!close) steadyAt = null;                       // strayed: start the clock again
+  else if (steadyAt === null) steadyAt = time;
+  const locked  = close && time - steadyAt >= SETTLE_MS;
 
   c2d.clearRect(0, 0, W, H);
   c2d.globalAlpha = 1;          // never inherit a partial alpha from the frame before
@@ -621,7 +688,10 @@ function paint(time){
   c2d.setLineDash([]);
 
   const cents = usable ? Math.max(-50, Math.min(50, reading.cents)) : 0;
-  easedCents += (cents - easedCents) * 0.22;
+  /* Adaptive easing: barely move for a small correction, so a settled reading
+     stops shivering, but close a big gap fast so a new string arrives at once. */
+  const gap = Math.abs(cents - easedCents);
+  easedCents += (cents - easedCents) * Math.min(0.35, 0.075 + gap * 0.012);
   const offset = -(easedCents / 50) * (H / 2 - 12);
 
   /* The head of the current sits at the right - that is now - and the wake runs
@@ -715,6 +785,7 @@ function paint(time){
       reading && reading.far ? t('noString')
     : !usable                ? ''
     : locked                 ? t('inTune')
+    : close                  ? t('settling')        // right, but not yet steady
     : t(reading.cents > 0 ? 'loosen' : 'tighten')   // the action, not the diagnosis
         .replace('{n}', Math.abs(Math.round(reading.cents)));
 
@@ -777,10 +848,10 @@ const go      = document.getElementById('go');
 GAUGES.forEach((g, i) => {
   const b = document.createElement('button');
   b.className = 'string'; b.dataset.gauge = g; b.dataset.index = i;
-  b.innerHTML = '<em></em><span></span>';
+  b.append(document.createElement('em'), document.createElement('span'));   // built, never parsed
   b.addEventListener('click', () => {
     pinned = pinned === i ? null : i;          // tap it again to go back to automatic
-    history.length = 0; lastHz = null; wake.length = 0;
+    history.length = 0; lastHz = null; suspect.length = 0; tracking = false; wake.length = 0;
     pluck(Number(b.dataset.midi));             // and hear where it is meant to land
     if (hint.dataset.tone !== 'warn')
       say(pinned === null ? t('hintGuitar') : t('hintPinned').replace('{n}', b.dataset.label));
@@ -852,6 +923,8 @@ function applyNaming(){
 
 function renderAbout(){
   document.getElementById('about-title').textContent = t('aboutTitle');
+  document.getElementById('update').textContent = t('updateBtn');
+  document.getElementById('update-note').textContent = '';
   const box = document.getElementById('about-body');
   box.textContent = '';
   t('about').forEach(([head, body]) => {
@@ -886,7 +959,7 @@ function selectTarget(value){
   shell.dataset.mode = mode;
   strings.hidden = free;                 // the six strings mean nothing in free mode
   if (shimmer) shimmer.frequency.value = MODES[mode].lowpass;
-  history.length = 0; lastHz = null;     // never judge a new target by the old reading
+  history.length = 0; lastHz = null; suspect.length = 0; tracking = false;   // never judge a new target
   wake.length = 0;                       // and never trail a wake from another string
   applyNaming();
   if (hint.dataset.tone !== 'warn') say(free ? t('hintFree') : t('hintGuitar'));
@@ -910,14 +983,15 @@ function syncBar(){
 }
 
 swap.addEventListener('click', () => {
+  /* held in the page and nowhere else, so it is gone when you close the tab
+     and every visit opens dark */
   const next = isDark() ? 'light' : 'dark';
   document.documentElement.dataset.theme = next;
-  /* the only thing this app ever stores: one word, on this device, never sent */
-  try { localStorage.setItem('neptuner-theme', next); } catch (e) {}
   applyThemeLabel(); syncBar(); paint(performance.now());
 });
 
 /* -------------------------------------------------------------------- wire */
+document.getElementById('update').addEventListener('click', checkForUpdate);
 document.getElementById('tuning').addEventListener('change', e => selectTarget(e.target.value));
 
 document.getElementById('lang').addEventListener('change', e => {
@@ -949,10 +1023,26 @@ document.getElementById('ref').addEventListener('input', e => {
   if (v >= 392 && v <= 466) a4 = v;
 });
 
-/* Registers the offline cache. Guarded because it needs https or localhost -
-   on a file:// open it simply does nothing and the app still works online. */
+/* Stores the app's own four files on the device so it runs with no connection.
+   Needs https or localhost; anywhere else it quietly does nothing. */
 if ('serviceWorker' in navigator){
   addEventListener('load', () => navigator.serviceWorker.register('sw.js').catch(() => {}));
+}
+try { localStorage.removeItem('neptuner-theme'); } catch (e) {}   // nothing is kept here
+
+/* The store is never refreshed on its own beyond the browser's own occasional
+   check, so this is how a reader asks for a new version on the spot. */
+async function checkForUpdate(){
+  const note = document.getElementById('update-note');
+  note.textContent = t('updateChecking');
+  try {
+    const reg = await navigator.serviceWorker.getRegistration();
+    if (!reg){ note.textContent = t('updateNone'); return; }
+    await reg.update();
+    note.textContent = (reg.installing || reg.waiting) ? t('updateFound') : t('updateNone');
+  } catch (e){
+    note.textContent = t('updateFail');
+  }
 }
 
 /* pick up the browser's language; the notation comes with it */
