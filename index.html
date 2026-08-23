@@ -414,12 +414,27 @@ const inst   = () => INSTRUMENTS[instIndex];
 const tuning = () => inst().tunings[tuningIndex];
 const flatSpelling = () => mode !== 'free' && !!tuning().flat;
 
-/* the band the detector may look in, which widens when no tuning is targeted */
+/* The band the detector may look in. It widens when no tuning is targeted, and
+   narrows hard around a string chosen by hand.
+
+   That narrowing matters more than it looks. Pluck a guitar's top E and the open
+   A rings in sympathy, because 330 Hz is exactly the third harmonic of 110. Both
+   strings then sound at once and the combined wave is genuinely periodic at 110,
+   so a detector reporting A is not making a mistake - it is reporting what is
+   there. The only way out is to stop looking that low. Seven semitones either
+   side is more than any retune needs and excludes both the octave and the
+   neighbouring strings. */
 function range(){
   const i = inst();
-  return mode === 'free'
-    ? { minHz:i.minHz, maxHz:i.freeMaxHz, lowpass:i.freeLowpass, reach:Infinity }
-    : { minHz:i.minHz, maxHz:i.maxHz,     lowpass:i.lowpass,     reach:3.5 };
+  if (mode === 'free')
+    return { minHz:i.minHz, maxHz:i.freeMaxHz, lowpass:i.freeLowpass, reach:Infinity };
+  const band = { minHz:i.minHz, maxHz:i.maxHz, lowpass:i.lowpass, reach:3.5 };
+  if (pinned !== null){
+    const target = a4 * Math.pow(2, (tuning().midi[pinned] - 69) / 12);
+    band.minHz = Math.max(band.minHz, target * Math.pow(2, -7 / 12));
+    band.maxHz = Math.min(band.maxHz, target * Math.pow(2,  7 / 12));
+  }
+  return band;
 }
 
 /* Notation follows the interface language: English shows letters, the other
@@ -434,7 +449,7 @@ const noteNames = () => flatSpelling()
 const I18N = {
   en:{
     notation:'letters', free:'Free note', inTune:'in tune', settling:'hold\u2026', loosen:'loosen {n} cents', tighten:'tighten {n} cents',
-    noString:'no string near',
+    noString:'no string near', pickString:'pick the string',
     axSharp:'sharp', axFlat:'flat',
     start:'Start listening', stop:'Stop listening',
     hintGuitar:'Pluck a string and let it ring. Tap one below to tune that string alone.',
@@ -477,7 +492,7 @@ const I18N = {
   },
   es:{
     notation:'latin', free:'Nota libre', inTune:'afinada', settling:'sost\u00e9n\u2026', loosen:'afloja {n} cents', tighten:'aprieta {n} cents',
-    noString:'ninguna cuerda cerca',
+    noString:'ninguna cuerda cerca', pickString:'elige la cuerda',
     axSharp:'alta', axFlat:'baja',
     start:'Empezar a escuchar', stop:'Dejar de escuchar',
     hintGuitar:'Pulsa una cuerda y d\u00e9jala sonar. Toca una abajo para afinar solo esa.',
@@ -522,7 +537,7 @@ const I18N = {
 
 /* Shown at the foot of the page, and repeated as the CACHE name in sw.js so the
    two cannot drift apart: what the app says it is, is what is stored. */
-const VERSION = '0.14';
+const VERSION = '0.16';
 
 let lang = 'en';
 const t = key => (I18N[lang] && I18N[lang][key]) || I18N.en[key];
@@ -534,12 +549,24 @@ const midiToHz = m => a4 * Math.pow(2, (m - 69) / 12);
 
 function describe(freq){
   const exact = 69 + 12 * Math.log2(freq / a4);
-  let midi;
+  let midi, unsure = false;
   if (mode !== 'free'){
-    midi = pinned !== null
-      ? tuning().midi[pinned]                    // however far away it is
-      : tuning().midi.reduce((best, m) =>
-          Math.abs(m - exact) < Math.abs(best - exact) ? m : best);
+    if (pinned !== null){
+      midi = tuning().midi[pinned];              // chosen by hand, however far away
+    } else {
+      /* Automatic is right whenever one target is clearly the closest, which is
+         nearly always. It is wrong exactly when it matters most: put the guitar
+         in Drop C while it is still in standard, and the sixth string sits three
+         semitones under G and four over C, so the nearest is the wrong one and
+         the advice is to tighten a string that needs loosening. The test is not
+         distance but margin - if the runner-up is nearly as close, there is no
+         way to know, and saying so is better than picking one. */
+      const near = tuning().midi
+        .map(m => ({ m, d: Math.abs(m - exact) }))
+        .sort((a, b) => a.d - b.d);
+      midi = near[0].m;
+      unsure = near.length > 1 && near[0].d > 2 && (near[1].d - near[0].d) < 2;
+    }
   } else {
     midi = Math.round(exact);
   }
@@ -547,7 +574,8 @@ function describe(freq){
   return {
     midi, exact, pc,
     cents:(exact - midi) * 100,
-    far:pinned === null && Math.abs(exact - midi) > range().reach,
+    far:pinned === null && (unsure || Math.abs(exact - midi) > range().reach),
+    unsure,
     name:noteNames()[pc],
     alt:naming === 'latin' ? LETTERS[pc] : '',   // shown in brackets, never instead
     octave:Math.floor(midi / 12) - 1,
@@ -639,8 +667,11 @@ let samples = null, stream = null, frame = null;
    filters and lengthens the buffer without restarting the microphone. */
 function applyAudioRange(){
   if (!analyser) return;
-  rumble.frequency.value = inst().highpass;
-  shimmer.frequency.value = range().lowpass;
+  const band = range();
+  /* with a string chosen, the filter closes in under it too, so a neighbour
+     ringing an octave or a twelfth below is attenuated before it is measured */
+  rumble.frequency.value = Math.max(inst().highpass, band.minHz * 0.85);
+  shimmer.frequency.value = band.lowpass;
   if (analyser.fftSize !== inst().fft){
     analyser.fftSize = inst().fft;
     samples = new Float32Array(analyser.fftSize);
@@ -948,7 +979,7 @@ function paint(time){
   document.getElementById('hz').textContent      = usable
     ? midiToHz(reading.midi).toFixed(2) + ' Hz' : '\u2014';
   document.getElementById('offset').textContent =
-      reading && reading.far ? t('noString')
+      reading && reading.far ? t(reading.unsure ? 'pickString' : 'noString')
     : !usable                ? ''
     : locked                 ? t('inTune')
     : close                  ? t('settling')        // right, but not yet steady
@@ -1024,6 +1055,7 @@ function buildStrings(){
     b.addEventListener('click', () => {
       pinned = pinned === i ? null : i;          // tap it again to go back to automatic
       history.length = 0; lastHz = null; suspect.length = 0; tracking = false; wake.length = 0;
+      applyAudioRange();                         // the band closes in on that string
       pluck(Number(b.dataset.midi));             // and hear where it is meant to land
       if (hint.dataset.tone !== 'warn')
         say(pinned === null ? t('hintGuitar') : t('hintPinned').replace('{n}', b.dataset.label));
