@@ -1,0 +1,19 @@
+{
+  "name": "NepTuner — guitar tuner",
+  "short_name": "NepTuner",
+  "description": "A guitar tuner: free chromatic note plus nine preset tunings.",
+  "start_url": ".",
+  "scope": ".",
+  "display": "standalone",
+  "orientation": "portrait",
+  "background_color": "#1c1a1d",
+  "theme_color": "#1c1a1d",
+  "icons": [
+    {
+      "src": "icon.png",
+      "sizes": "512x512",
+      "type": "image/png",
+      "purpose": "any maskable"
+    }
+  ]
+}

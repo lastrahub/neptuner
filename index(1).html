@@ -1,0 +1,1059 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+<meta charset="utf-8" />
+<meta name="viewport" content="width=device-width, initial-scale=1" />
+<!-- Nothing may leave this origin. default-src 'none' blocks everything not
+     named below; connect-src 'none' means no fetch, no XHR, no WebSocket, no
+     beacon. If anyone ever pastes in a tracker, the browser refuses it. -->
+<meta http-equiv="Content-Security-Policy" content="
+  default-src 'none';
+  script-src 'unsafe-inline';
+  style-src 'unsafe-inline';
+  img-src 'self';
+  manifest-src 'self';
+  worker-src 'self';
+  child-src 'self';
+  connect-src 'none';
+  base-uri 'none';
+  form-action 'none'" />
+<meta name="theme-color" id="theme-color" content="#1c1a1d" />
+<meta name="mobile-web-app-capable" content="yes" />
+<meta name="apple-mobile-web-app-capable" content="yes" />
+<meta name="apple-mobile-web-app-title" content="NepTuner" />
+<link rel="manifest" href="manifest.webmanifest" />
+<link rel="apple-touch-icon" href="icon.png" />
+<link rel="icon" href="icon.png" />
+<title>NepTuner</title>
+<style>
+  /* One superfamily, one lifted panel, and exactly two saturated colours -
+     both of them states of the string, never decoration. Burgundy is "not
+     yet", green is "locked". At rest the page is paper and ink; green appears
+     only at the moment the string is in tune, which is what makes it read as
+     a reward instead of another colour on the page.
+     Every value below is measured: contrast against its own ground, and the
+     luminance gap between the two states, so the lock is still legible to
+     someone who cannot separate red from green. */
+  :root{
+    color-scheme:dark;
+    --bg:#1c1a1d;
+    --panel:#232025;
+    --line:#38343a;
+    --text:#f3efee;      /* 15.1:1 on bg */
+    --muted:#b0a8aa;     /*  7.4:1 on bg */
+    --accent:#e0655c;    /*  5.1:1 - the far end of the ramp, red */
+    --green:#5ff0e4;     /* 12.4:1 - the near end, bright aquamarine */
+    /* The current walks this ramp: red when far out, blue at the centre. Stops
+       are explicit rather than interpolated from the two ends, because a plain
+       hue blend dips through a violet that falls to 2.8:1 and disappears. Every
+       stop here clears 4.5:1, and contrast climbs steadily towards the centre,
+       so the approach reads as a gradient even with no colour vision at all. */
+    --ramp-0:#e0655c; --ramp-1:#dd6aa8; --ramp-2:#b184e4;
+    --ramp-3:#74b6f0; --ramp-4:#5ff0e4;
+    --tint-press:rgba(255,255,255,.07);
+    /* whatever the device already has - nothing to download, nothing to log */
+    --sans:system-ui, -apple-system, "Segoe UI", Roboto, sans-serif;
+    --mono:ui-monospace, SFMono-Regular, "SF Mono", Menlo, "Cascadia Mono",
+           "Roboto Mono", Consolas, monospace;
+  }
+  :root[data-theme="light"]{
+    color-scheme:light;
+    --bg:#fbfaf9;
+    --panel:#ffffff;
+    --line:#e7dfe0;
+    --text:#1f1a1b;    /* 16.5:1 - warm ink, not black */
+    --muted:#6b5e60;   /*  5.9:1 */
+    --accent:#c0453c;  /*  4.8:1 - the far end of the ramp, red */
+    /* A bright aquamarine cannot serve both grounds: on this one it lands at
+       1.3:1 and vanishes. Light keeps the same hue at full saturation but dark
+       enough to read - the centre is the most vivid colour the ground allows,
+       which is a different pixel in each theme. */
+    --green:#004e60;   /*  8.9:1 - the near end, saturated aquamarine */
+    --ramp-0:#c0453c; --ramp-1:#ad3a7c; --ramp-2:#7b3caa;
+    --ramp-3:#2f519f; --ramp-4:#004e60;
+    --tint-press:rgba(0,0,0,.06);
+  }
+
+  /* To try the blue instead, swap two values in the block above:
+       --accent:#16386b;  (11.1:1)
+     Contrast and greyscale separation both hold. */
+
+  *{box-sizing:border-box}
+  html,body{margin:0}
+  body{
+    min-height:100svh; background:var(--bg); color:var(--text);
+    font-family:var(--sans); font-size:15px; -webkit-font-smoothing:antialiased;
+    display:flex; justify-content:center;
+  }
+  .shell{width:100%; max-width:520px; padding:26px 20px 40px; display:flex; flex-direction:column; gap:18px}
+  :focus-visible{outline:2px solid var(--accent); outline-offset:2px}
+  [hidden]{display:none !important}   /* beats .strings{display:grid} */
+
+  /* header ------------------------------------------------------------- */
+  .top{display:flex; flex-wrap:wrap; align-items:center; justify-content:space-between; gap:12px 16px}
+  .wordmark{font-family:var(--mono); font-size:15px; font-weight:600; letter-spacing:.01em;
+            display:inline-flex; align-items:center; gap:8px}
+  /* An amphora whose three upward points - the two lips and the string rising
+     out of it - are a trident. Inline SVG, so it costs no image request, which
+     the policy would refuse anyway, and it takes the aquamarine straight from
+     the palette, so it follows the theme with no extra rule. */
+  .wordmark .mark{width:16px; height:23px; flex:none; color:var(--green)}
+  .controls{display:flex; flex-wrap:wrap; align-items:center; justify-content:flex-end; gap:10px 16px;
+            font-family:var(--mono); font-size:12px; color:var(--muted)}
+  select, input{font:inherit; color:var(--text); background:transparent; border:none;
+                border-bottom:1px solid var(--line); padding:4px 0}
+  select{-webkit-appearance:none; appearance:none; cursor:pointer; padding-right:16px}
+  select:focus-visible, input:focus-visible{outline:none; border-bottom-color:var(--accent)}
+  .pick{position:relative; display:inline-flex; align-items:center}
+  .pick::after{
+    content:""; width:5px; height:5px; margin-left:-12px; pointer-events:none;
+    border-right:1.5px solid var(--muted); border-bottom:1.5px solid var(--muted);
+    transform:rotate(45deg) translateY(-2px);
+  }
+  .ref{display:flex; align-items:center; gap:7px; white-space:nowrap}
+  .ref input{width:46px; text-align:right}
+
+  /* the contrast glyph: a circle half filled, which is the state itself.
+     Left half solid on dark, right half solid on light. */
+  .swap{
+    width:22px; height:22px; flex:none; padding:0; cursor:pointer; position:relative;
+    overflow:hidden; appearance:none; background:transparent; border-radius:50%;
+    border:1.5px solid var(--muted); color:var(--muted);
+    transition:border-color .18s, color .18s;
+  }
+  .swap::before{content:""; position:absolute; inset:-1px 50% -1px -1px; background:currentColor}
+  :root[data-theme="light"] .swap::before{inset:-1px -1px -1px 50%}
+  .swap:hover{border-color:var(--text); color:var(--text)}
+
+
+  /* the instrument ----------------------------------------------------- */
+  .panel{
+    background:var(--panel); border:1px solid var(--line); border-radius:8px;
+    padding:22px 20px 18px; display:flex; flex-direction:column; gap:12px;
+  }
+  .readout{display:flex; align-items:flex-end; justify-content:space-between; gap:14px; min-height:92px}
+  .pitch{display:flex; align-items:flex-start; gap:9px; min-width:0}
+  .pitch b{font-family:var(--mono); font-weight:600; line-height:.9;
+           font-size:clamp(58px,17vw,92px); letter-spacing:-.035em}
+  .shell[data-naming="latin"] .pitch b{font-size:clamp(38px,11.5vw,66px); letter-spacing:-.045em}
+  .pitch i{font-style:normal; font-family:var(--mono); color:var(--muted);
+           display:flex; flex-direction:column; gap:2px; padding-top:7px; line-height:1.15}
+  .pitch i span{font-size:16px; font-weight:500}
+  .pitch i small{font-size:13px}
+  .numbers{text-align:right; font-family:var(--mono); font-size:12.5px; color:var(--muted); line-height:1.7}
+  .numbers strong{display:block; font-size:15px; font-weight:600; color:var(--text); letter-spacing:-.01em}
+  .readout.dim .pitch b{color:var(--muted); opacity:.45}
+  .readout.dim .numbers strong{color:var(--muted); font-weight:500}
+  .readout.locked .numbers strong{color:var(--green)}
+
+  .meter{display:flex; gap:12px; align-items:stretch}
+  canvas{flex:1; width:100%; height:148px; display:block; touch-action:none}
+  .axis{width:64px; display:flex; flex-direction:column; justify-content:space-between;
+        font-family:var(--mono); font-size:10.5px; color:var(--muted);
+        letter-spacing:.03em; line-height:1.25; word-break:break-word}
+
+  /* six strings -------------------------------------------------------- */
+  .strings{display:grid; grid-template-columns:repeat(6,1fr); gap:7px}
+  .string{
+    background:transparent; border:1px solid var(--line); border-radius:8px; cursor:pointer;
+    min-height:76px; padding:12px 0 10px; display:flex; flex-direction:column;
+    align-items:center; justify-content:center; gap:10px;
+    color:var(--muted); font-family:var(--mono); font-size:11.5px; font-weight:500;
+    transition:border-color .2s, color .2s;
+  }
+  .string:hover{color:var(--text); border-color:var(--muted)}
+  .string:active{color:var(--text); border-color:var(--text); background:var(--tint-press)}
+  .string span{display:flex; flex-direction:column; align-items:center; gap:2px}
+  .string em{display:block; width:1px; height:24px; background:currentColor; border-radius:1px; font-style:normal}
+  .string[data-gauge="6"] em{width:4px} .string[data-gauge="5"] em{width:3.2px}
+  .string[data-gauge="4"] em{width:2.5px} .string[data-gauge="3"] em{width:2px}
+  .string[data-gauge="2"] em{width:1.4px} .string[data-gauge="1"] em{width:1px}
+  .string.pinned{color:var(--text); border-color:var(--text)}
+  .strings.pinning .string:not(.pinned){opacity:.32}
+  .string.live{color:var(--accent); border-color:var(--accent)}
+  .string.live.locked{color:var(--green); border-color:var(--green)}
+
+  /* size, not transparency, marks the secondary name - opacity would cost contrast */
+  .string small{display:block; font-size:.86em; font-weight:400}
+
+  /* footer ------------------------------------------------------------- */
+  .action{display:flex; flex-direction:column; gap:11px}
+  button.go{
+    background:var(--text); color:var(--bg); border:none; border-radius:8px;
+    padding:15px; font-family:var(--sans); font-weight:600; font-size:15px; cursor:pointer;
+    transition:opacity .18s;
+  }
+  button.go:hover{opacity:.87}
+  button.go[data-on="true"]{background:transparent; color:var(--text); box-shadow:inset 0 0 0 1px var(--line)}
+  .hint{margin:0; font-size:13px; line-height:1.55; color:var(--muted); min-height:36px}
+
+  /* a native <details>: no script, keyboard accessible, closed by default */
+  .about{border-top:1px solid var(--line); padding-top:15px; margin-top:2px}
+  .about summary{
+    cursor:pointer; list-style:none; color:var(--muted);
+    font-family:var(--mono); font-size:11.5px; letter-spacing:.05em;
+    display:flex; align-items:center; gap:10px; line-height:1.45;
+  }
+  .about summary::-webkit-details-marker{display:none}
+  .about summary::after{
+    content:""; width:5px; height:5px; margin-left:auto; flex:none;
+    border-right:1.5px solid currentColor; border-bottom:1.5px solid currentColor;
+    transform:rotate(45deg) translateY(-2px); transition:transform .2s;
+  }
+  .about[open] summary::after{transform:rotate(-135deg) translateY(1px)}
+  .about summary:hover{color:var(--text)}
+  .about h3{
+    margin:18px 0 5px; font-family:var(--mono); font-size:11.5px; font-weight:600;
+    letter-spacing:.03em; color:var(--text);
+  }
+  .about p{margin:0; font-size:12.5px; line-height:1.6; color:var(--muted)}
+  /* Its own row, not inside the panel above: that one explains, this one acts,
+     and an action hidden inside a collapsed explanation cannot be found. Both
+     are set alike so they read as two quiet lines at the foot. */
+  .update{
+    border-top:1px solid var(--line); padding-top:15px; margin-top:2px;
+    display:flex; align-items:baseline; justify-content:space-between; gap:10px 14px; flex-wrap:wrap;
+  }
+  .update button{
+    background:none; border:none; padding:0; cursor:pointer; text-align:left;
+    color:var(--muted); font-family:var(--mono); font-size:11.5px; letter-spacing:.05em;
+    transition:color .18s;
+  }
+  .update button:hover{color:var(--text)}
+  .update span{font-size:12.5px; color:var(--muted); text-align:right}
+  .hint[data-tone="warn"]{color:var(--accent)}
+</style>
+</head>
+<body>
+<main class="shell" id="shell" data-mode="guitar" data-naming="letters">
+
+  <header class="top">
+    <span class="wordmark">
+      <svg class="mark" viewBox="4 0.5 16 23" fill="none" stroke="currentColor"
+           stroke-linecap="round" aria-hidden="true">
+        <path stroke-width="1.25" d="M5.2 2.6C6.6 6.6 9.4 7.4 9.9 11.2C10.3 13.6 4.9 14.2 4.9 17C4.9 19.6 7.9 20.9 10.2 21
+                                     M18.8 2.6C17.4 6.6 14.6 7.4 14.1 11.2C13.7 13.6 19.1 14.2 19.1 17C19.1 19.6 16.1 20.9 13.8 21
+                                     M10.2 21H13.8M12 1.2V18.6"/>
+        <path stroke-width="1.05" d="M8.8 22.4H15.2"/>
+      </svg>NepTuner</span>
+    <div class="controls">
+      <span class="pick">
+        <select id="lang">
+          <option value="en">English</option>
+          <option value="es">Espa&ntilde;ol</option>
+        </select>
+      </span>
+      <label class="ref"><span id="ref-label">A4</span>
+        <input id="ref" type="number" min="392" max="466" step="0.5" value="440">
+        <span>Hz</span>
+      </label>
+      <button class="swap" id="swap" type="button"></button>
+    </div>
+  </header>
+
+  <span class="pick wide"><select id="tuning"></select></span>
+
+  <section class="panel">
+    <div class="readout dim" id="readout" aria-live="polite">
+      <div class="pitch"><b id="note">&mdash;</b><i><span id="octave"></span><small id="alt"></small></i></div>
+      <div class="numbers">
+        <strong id="offset"></strong>
+        <span id="hz">&mdash;</span>
+      </div>
+    </div>
+    <div class="meter">
+      <canvas id="wave"></canvas>
+      <div class="axis">
+        <span id="ax-sharp">sharp</span>
+        <span id="ax-flat">flat</span>
+      </div>
+    </div>
+  </section>
+
+  <section class="strings" id="strings"></section>
+
+  <div class="action">
+    <button class="go" id="go" data-on="false">Start listening</button>
+    <p class="hint" id="hint"></p>
+  </div>
+
+  <details class="about">
+    <summary id="about-title"></summary>
+    <div id="about-body"></div>
+  </details>
+
+  <div class="update">
+    <button id="update" type="button"></button>
+    <span id="update-note"></span>
+  </div>
+
+</main>
+
+<script>
+/* ---------------------------------------------------------------- naming */
+const LETTERS = ['C','C\u266F','D','D\u266F','E','F','F\u266F','G','G\u266F','A','A\u266F','B'];
+const LATIN   = ['Do','Do\u266F','Re','Re\u266F','Mi','Fa','Fa\u266F','Sol','Sol\u266F','La','La\u266F','Si'];
+/* Same pitches, spelled with flats. A guitarist in E flat reads E\u266D, never D\u266F. */
+const LETTERS_FLAT = ['C','D\u266D','D','E\u266D','E','F','G\u266D','G','A\u266D','A','B\u266D','B'];
+const LATIN_FLAT   = ['Do','Re\u266D','Re','Mi\u266D','Mi','Fa','Sol\u266D','Sol','La\u266D','La','Si\u266D','Si'];
+
+const GAUGES = [6, 5, 4, 3, 2, 1];   // 6th string first, thickest to thinnest
+const TUNINGS = [
+  {name:'E Standard',       group:'Standard', midi:[40,45,50,55,59,64]},
+  {name:'E\u266D Standard',  group:'Standard', midi:[39,44,49,54,58,63], flat:true},
+  {name:'D Standard',       group:'Standard', midi:[38,43,48,53,57,62]},
+  {name:'Drop D',           group:'Drop',     midi:[38,45,50,55,59,64]},
+  {name:'Drop C',           group:'Drop',     midi:[36,43,48,53,57,62]},
+  {name:'Open G',           group:'Open',     midi:[38,43,50,55,59,62]},
+  {name:'Open D',           group:'Open',     midi:[38,45,50,54,57,62]},
+  {name:'DADGAD',           group:'Open',     midi:[38,45,50,55,57,62]},
+  {name:'Open C',           group:'Open',     midi:[36,43,48,55,60,64]},
+];
+let tuningIndex = 0;
+/* which string you chose by hand, or null for automatic. Choosing one is the
+   only way the tuner can know you mean the 6th when the guitar is still in
+   standard and the target is four semitones below. */
+let pinned = null;
+const tuning = () => TUNINGS[tuningIndex];
+const flatSpelling = () => mode === 'guitar' && !!tuning().flat;
+
+/* Notation follows the interface language: English shows letters, the other
+   four show Do-Re-Mi with the letter in brackets. Printing both names is what
+   makes a separate control unnecessary - somebody reading tab still sees the
+   letter, just smaller. */
+let naming = 'letters';
+const noteNames = () => flatSpelling()
+  ? (naming === 'latin' ? LATIN_FLAT : LETTERS_FLAT)
+  : (naming === 'latin' ? LATIN : LETTERS);
+
+const I18N = {
+  en:{
+    notation:'letters', free:'Free note', inTune:'in tune', settling:'hold\u2026', loosen:'loosen {n} cents', tighten:'tighten {n} cents',
+    noString:'no string near',
+    axSharp:'sharp', axFlat:'flat',
+    start:'Start listening', stop:'Stop listening',
+    hintGuitar:'Pluck a string and let it ring. Tap one below to tune that string alone.',
+    hintPinned:'Tuning the {n} string only. Tap it again for automatic.',
+    hintFree:'Play one note at a time. A chord has no single pitch to report.',
+    micWait:'Waiting for microphone permission\u2026',
+    micDenied:'The tuner needs microphone access. Allow it in your browser\u2019s site settings, then start listening again.',
+    micNone:'No microphone available on this device.',
+    stopped:'Stopped. Nothing is being recorded or sent anywhere.',
+    aPick:'Tune the {n} string', aRef:'{n}4 reference in hertz',
+    aMeter:'Pitch deviation shown as a flowing current', aLang:'Interface language', aTuning:'Tuning',
+    aboutTitle:'How it works, privacy and security',
+    updateBtn:'Check for updates',
+    updateChecking:'Checking\u2026',
+    updateFound:'Update ready. Close the app and open it again.',
+    updateNone:'NepTuner is up to date.',
+    updateFail:'Could not check. This step needs a connection.',
+    about:[
+      ['The audio stays on the device',
+       'The microphone feeds the browser audio engine and the pitch is worked out on the phone itself. The app contains no instruction capable of sending anything anywhere: no requests, no connections, no background uploads.'],
+      ['No external requests',
+       'Nothing is loaded from anybody else: no fonts, no icons, no scripts, no analytics. A Content-Security-Policy of default-src none and connect-src none makes the browser refuse any outgoing connection, so this is enforced rather than promised.'],
+      ['No account and no personal data',
+       'No sign-in, no identifiers, no cookies. No preference is kept either: the theme you pick lasts as long as the tab, and every launch starts in dark.'],
+      ['The microphone',
+       'Permission is requested when you press Start listening, and the microphone is released the moment you stop. Audio is never recorded, saved or transmitted.'],
+      ['It works with no connection',
+       'The four files that make up the app are stored on the device the first time you open it, and served from there afterwards. It runs in aeroplane mode, and using it sends no requests to any server. The browser checks for updates on its own at most once a day; the button below checks straight away.'],
+      ['How the note is detected',
+       'It analyses about 4,096 samples and looks for the delay at which the wave matches itself. That delay is the period of the string; the frequency and the distance in cents to the target note follow from it.'],
+      ['Why it waits before saying in tune',
+       'A string sounds sharp the instant it is plucked and falls as it settles. The reading counts as in tune only once it has held steady for a moment, so you do not tune to the attack and end up flat.'],
+    ],
+    toLight:'Switch to light theme', toDark:'Switch to dark theme',
+  },
+  es:{
+    notation:'latin', free:'Nota libre', inTune:'afinada', settling:'sost\u00e9n\u2026', loosen:'afloja {n} cents', tighten:'aprieta {n} cents',
+    noString:'ninguna cuerda cerca',
+    axSharp:'alta', axFlat:'baja',
+    start:'Empezar a escuchar', stop:'Dejar de escuchar',
+    hintGuitar:'Pulsa una cuerda y d\u00e9jala sonar. Toca una abajo para afinar solo esa.',
+    hintPinned:'Afinando solo la cuerda {n}. T\u00f3cala otra vez para volver al autom\u00e1tico.',
+    hintFree:'Toca una nota cada vez. Un acorde no tiene un tono \u00fanico.',
+    micWait:'Esperando permiso del micr\u00f3fono\u2026',
+    micDenied:'El afinador necesita acceso al micr\u00f3fono. Perm\u00edtelo en los ajustes del sitio de tu navegador y vuelve a empezar.',
+    micNone:'No hay micr\u00f3fono disponible en este dispositivo.',
+    stopped:'Parado. No se graba ni se env\u00eda nada.',
+    aPick:'Afinar la cuerda {n}', aRef:'referencia {n}4 en hercios',
+    aMeter:'Desviaci\u00f3n del tono mostrada como una corriente de agua', aLang:'Idioma de la interfaz', aTuning:'Afinaci\u00f3n',
+    aboutTitle:'Informaci\u00f3n sobre funcionamiento, privacidad y seguridad',
+    updateBtn:'Comprobar actualizaciones',
+    updateChecking:'Comprobando\u2026',
+    updateFound:'Actualizaci\u00f3n disponible. Cierra la app y vuelve a abrirla.',
+    updateNone:'NepTuner est\u00e1 actualizada.',
+    updateFail:'No se pudo comprobar. Este paso necesita conexi\u00f3n.',
+    about:[
+      ['El audio no sale del dispositivo',
+       'El micr\u00f3fono entra en el motor de audio del navegador y el tono se calcula en el propio tel\u00e9fono. La app no contiene ninguna instrucci\u00f3n capaz de enviar nada a ning\u00fan sitio: ni peticiones, ni conexiones, ni env\u00edos en segundo plano.'],
+      ['Sin peticiones externas',
+       'No se carga nada de terceros: ni fuentes, ni iconos, ni scripts, ni anal\u00edtica. Una Content-Security-Policy con default-src none y connect-src none hace que el navegador rechace cualquier conexi\u00f3n saliente, as\u00ed que est\u00e1 impuesto y no simplemente prometido.'],
+      ['Sin cuenta y sin datos personales',
+       'Ni registro, ni identificadores, ni cookies. Tampoco se guarda ninguna preferencia: el tema que elijas dura lo que dure la pesta\u00f1a, y cada apertura empieza en oscuro.'],
+      ['El micr\u00f3fono',
+       'El permiso se pide al pulsar Empezar a escuchar, y el micr\u00f3fono se libera en cuanto paras. El audio no se graba, ni se guarda, ni se transmite.'],
+      ['Funciona sin conexi\u00f3n',
+       'Los cuatro archivos que forman la app se guardan en el dispositivo la primera vez que la abres, y despu\u00e9s se sirven desde ah\u00ed. Funciona en modo avi\u00f3n, y usarla no env\u00eda ninguna petici\u00f3n a ning\u00fan servidor. El navegador comprueba actualizaciones por su cuenta como mucho una vez al d\u00eda; el bot\u00f3n de abajo lo comprueba al momento.'],
+      ['C\u00f3mo detecta la nota',
+       'Analiza unas 4.096 muestras y busca el desfase con el que la onda coincide consigo misma. Ese desfase es el periodo de la cuerda; de ah\u00ed salen la frecuencia y la distancia en cents hasta la nota objetivo.'],
+      ['Por qu\u00e9 espera antes de decir afinada',
+       'Una cuerda suena alta en el momento de pulsarla y va bajando hasta asentarse. La lectura cuenta como afinada solo cuando se ha mantenido estable un instante, para que no afines al ataque y te quedes bajo.'],
+    ],
+    toLight:'Cambiar al tema claro', toDark:'Cambiar al tema oscuro',
+  },
+};
+
+let lang = 'en';
+const t = key => (I18N[lang] && I18N[lang][key]) || I18N.en[key];
+
+/* ------------------------------------------------------------------ music */
+const MODES = {
+  /* C2 is 65.4 Hz, and the 3.5-semitone reach puts a slack one at 53.4 Hz,
+     so the floor has to sit below that or Drop C simply never registers */
+  /* The knee has to sit above the top string's harmonics. At 1100 Hz the 4th
+     harmonic of the high E lands right in it and comes out 79 degrees out of
+     phase with the fundamental, while the low E's harmonics shift barely 19.
+     The wave stops resembling itself, which is the one thing YIN measures, so
+     the two thinnest strings simply went undetected. */
+  guitar:{ minHz:52, maxHz:450,  lowpass:1800, reach:3.5 },
+  free:  { minHz:60, maxHz:1400, lowpass:2800, reach:Infinity },
+};
+let mode = 'guitar';
+let a4 = 440;
+const midiToHz = m => a4 * Math.pow(2, (m - 69) / 12);
+
+function describe(freq){
+  const exact = 69 + 12 * Math.log2(freq / a4);
+  let midi;
+  if (mode === 'guitar'){
+    midi = pinned !== null
+      ? tuning().midi[pinned]                    // however far away it is
+      : tuning().midi.reduce((best, m) =>
+          Math.abs(m - exact) < Math.abs(best - exact) ? m : best);
+  } else {
+    midi = Math.round(exact);
+  }
+  const pc = ((midi % 12) + 12) % 12;
+  return {
+    midi, exact, pc,
+    cents:(exact - midi) * 100,
+    far:pinned === null && Math.abs(exact - midi) > MODES[mode].reach,
+    name:noteNames()[pc],
+    alt:naming === 'latin' ? LETTERS[pc] : '',   // shown in brackets, never instead
+    octave:Math.floor(midi / 12) - 1,
+  };
+}
+
+/* -------------------------------------------------------------- detection */
+/* YIN (de Cheveigne & Kawahara 2002): squared difference over lag, then a
+   cumulative-mean normalisation so the first dip below a threshold is the
+   true period rather than a harmonic. Lags are restricted to the mode's
+   frequency window so the inner loop fits in an animation frame. */
+const THRESHOLD = 0.12;   // a dip this deep is certainly the period
+const FALLBACK  = 0.35;   // a shallow one still counts if nothing better exists
+let diff = null, norm = null, cachedTauMax = -1;
+
+function detectPitch(buf, sampleRate, minHz, maxHz, mayGuess){
+  const tauMax = Math.min(Math.floor(sampleRate / minHz), buf.length >> 1);
+  const tauMin = Math.max(2, Math.floor(sampleRate / maxHz));
+  const window = Math.min(2048, buf.length - tauMax);
+  if (tauMax !== cachedTauMax){
+    diff = new Float32Array(tauMax + 2);
+    norm = new Float32Array(tauMax + 2);
+    cachedTauMax = tauMax;
+  }
+
+  for (let tau = 1; tau <= tauMax; tau++){
+    let sum = 0;
+    for (let i = 0; i < window; i++){
+      const d = buf[i] - buf[i + tau];
+      sum += d * d;
+    }
+    diff[tau] = sum;
+  }
+
+  let running = 0;
+  norm[0] = 1;
+  for (let tau = 1; tau <= tauMax; tau++){
+    running += diff[tau];
+    norm[tau] = running > 0 ? diff[tau] * tau / running : 1;
+  }
+
+  let tau = tauMin, found = -1;
+  for (; tau <= tauMax; tau++){
+    if (norm[tau] < THRESHOLD){
+      while (tau + 1 <= tauMax && norm[tau + 1] < norm[tau]) tau++;
+      found = tau; break;
+    }
+  }
+
+  /* Nothing cleared the threshold. A plain steel string has a shallow dip, not
+     an absent one, so falling back to the deepest dip is what makes the top two
+     strings readable at all. But on a dying note the deepest dip is only the
+     luckiest piece of noise, so the caller allows this while the signal is still
+     strong and forbids it as the note fades. */
+  if (found < 0 && mayGuess){
+    let best = tauMin;
+    for (let t = tauMin; t <= tauMax; t++) if (norm[t] < norm[best]) best = t;
+    if (norm[best] < FALLBACK) found = best;
+  }
+  if (found < 0) return null;
+
+  let period = found;
+  if (found > tauMin && found < tauMax){
+    const s0 = norm[found - 1], s1 = norm[found], s2 = norm[found + 1];
+    const denom = 2 * (2 * s1 - s2 - s0);
+    if (denom !== 0) period = found + (s2 - s0) / denom;
+  }
+  return { hz: sampleRate / period, clarity: 1 - norm[found] };
+}
+
+/* ------------------------------------------------------------------ audio */
+let ctx = null, analyser = null, shimmer = null, samples = null, stream = null, frame = null;
+/* Two levels, not one. It takes a clear pluck to start trusting a note, but far
+   less to keep following one already found, so the reading stops flickering on
+   and off while the string decays across a single threshold. */
+const RMS_OPEN = 0.010, RMS_HOLD = 0.004;
+const CLARITY_MIN = 0.72;    // below this the waveform is not periodic enough
+const JUMP_CENTS  = 300;     // further than this from the current note is suspect
+/* A freshly plucked string sounds sharp and falls as it settles - measurably,
+   several cents over the first half second. Calling it in tune the instant it
+   crosses the centre means calling it during that fall, and you end up flat.
+   So the lock waits: the note has to stay inside this band for this long. */
+const SETTLE_CENTS = 3, SETTLE_MS = 300;
+const HOLD_MS = 1100, history = [], suspect = [];
+let lastHz = null, lastSeen = 0, easedCents = 0, tracking = false, steadyAt = null;
+let rmsSmooth = 0, attackAt = -1e9;
+
+/* A big jump in pitch is only believable if a string was actually struck. A new
+   note arrives with an attack - the level rises sharply. The other thing that
+   makes the reading leap is one of the five strings you did not play ringing in
+   sympathy: as the note you plucked dies away, that resonance becomes the
+   loudest periodic thing in the room and the detector reports it, faithfully
+   and uselessly. It is a real waveform, so no measure of clarity can catch it.
+   What separates the two is the level: a pluck rises, a resonance only fades.
+   So a jump is accepted near an attack, and ignored while the sound decays. */
+function accept(hz, time){
+  if (lastHz){
+    const jump = Math.abs(1200 * Math.log2(hz / lastHz));
+    if (jump > JUMP_CENTS){
+      if (time - attackAt > 400){ suspect.length = 0; return; }   // no pluck: a leftover
+      suspect.push(hz);
+      if (suspect.length < 3) return;
+      const spread = Math.abs(1200 * Math.log2(suspect[0] / suspect[suspect.length - 1]));
+      if (spread > 120){ suspect.length = 0; return; }   // they disagree: it was noise
+      history.length = 0;                                // they agree: a real change
+    }
+  }
+  suspect.length = 0;
+  history.push(hz);
+  if (history.length > 7) history.shift();
+  const sorted = [...history].sort((a, b) => a - b);
+  lastHz = sorted[sorted.length >> 1];       // the median, never the latest sample
+  lastSeen = time;
+  tracking = true;
+}
+
+async function audio(){
+  if (!ctx) ctx = new (window.AudioContext || window.webkitAudioContext)();
+  if (ctx.state !== 'running') await ctx.resume();   // 'suspended' and Safari's 'interrupted'
+  return ctx;
+}
+
+async function listen(){
+  await audio();
+  /* the browser's voice-call processing destroys pitch information - off */
+  stream = await navigator.mediaDevices.getUserMedia({
+    audio:{ echoCancellation:false, noiseSuppression:false, autoGainControl:false, channelCount:1 }
+  });
+  const source = ctx.createMediaStreamSource(stream);
+  const rumble = ctx.createBiquadFilter();          // handling noise, mains hum
+  rumble.type = 'highpass'; rumble.frequency.value = 45;   // below a slack C2
+  shimmer = ctx.createBiquadFilter();               // harmonics above the fundamental
+  shimmer.type = 'lowpass'; shimmer.frequency.value = MODES[mode].lowpass;
+  analyser = ctx.createAnalyser();
+  analyser.fftSize = 4096;
+  source.connect(rumble).connect(shimmer).connect(analyser);
+  samples = new Float32Array(analyser.fftSize);
+  frame = requestAnimationFrame(loop);
+}
+
+function stop(){
+  cancelAnimationFrame(frame); frame = null;
+  if (stream) stream.getTracks().forEach(tr => tr.stop());
+  stream = null; analyser = null; shimmer = null;
+  lastHz = null; tracking = false; history.length = 0; suspect.length = 0;
+  rmsSmooth = 0; attackAt = -1e9;
+}
+
+function loop(time){
+  frame = requestAnimationFrame(loop);
+  analyser.getFloatTimeDomainData(samples);
+
+  let energy = 0;
+  for (let i = 0; i < samples.length; i++) energy += samples[i] * samples[i];
+  const rms = Math.sqrt(energy / samples.length);
+
+  /* an attack is the level climbing sharply out of whatever came before */
+  const before = rmsSmooth;
+  rmsSmooth += (rms - rmsSmooth) * 0.3;
+  if (rmsSmooth > RMS_OPEN && rmsSmooth > before * 1.5) attackAt = time;
+
+  const range  = MODES[mode];
+  const strong = rms > RMS_OPEN;
+  if (rms > (tracking ? RMS_HOLD : RMS_OPEN)){
+    const found = detectPitch(samples, ctx.sampleRate, range.minHz, range.maxHz, strong);
+    if (found && found.clarity >= CLARITY_MIN &&
+        found.hz >= range.minHz && found.hz <= range.maxHz){
+      accept(found.hz, time);
+    }
+  }
+  if (lastHz && time - lastSeen > HOLD_MS){
+    lastHz = null; tracking = false;
+    history.length = 0; suspect.length = 0;
+  }
+  paint(time);
+}
+
+/* ------------------------------------------------------------------- paint */
+const canvas = document.getElementById('wave');
+const c2d = canvas.getContext('2d');
+const still = matchMedia('(prefers-reduced-motion: reduce)');
+let W = 0, H = 0;
+
+function size(){
+  const dpr = Math.min(devicePixelRatio || 1, 2);
+  const r = canvas.getBoundingClientRect();
+  W = r.width; H = r.height;
+  canvas.width = Math.round(W * dpr); canvas.height = Math.round(H * dpr);
+  c2d.setTransform(dpr, 0, 0, dpr, 0, 0);
+}
+new ResizeObserver(size).observe(canvas);
+size();
+
+/* Where the current has been. Samples carry their own timestamp, so the wake
+   is linear in time whatever the frame rate, and a gap longer than a moment
+   starts a new stroke - one trace per pluck. */
+const WAKE_MS = 6000;
+const wake = [];
+
+/* two hex colours blended channel by channel */
+function mix(a, b, u){
+  let out = '#';
+  for (let i = 1; i < 7; i += 2){
+    const x = parseInt(a.substr(i, 2), 16), y = parseInt(b.substr(i, 2), 16);
+    out += Math.round(x + (y - x) * u).toString(16).padStart(2, '0');
+  }
+  return out;
+}
+
+/* a position on the red-to-blue ramp, 0 = far out, 1 = in tune */
+function rampAt(stops, near){
+  const step = Math.min(Math.max(near, 0), 1) * (stops.length - 1);
+  const i = Math.min(Math.floor(step), stops.length - 2);
+  return mix(stops[i], stops[i + 1], step - i);
+}
+
+const rgba = (hex, a) =>
+  'rgba(' + [1, 3, 5].map(i => parseInt(hex.substr(i, 2), 16)).join(',') + ',' + a + ')';
+
+function paint(time){
+  /* every colour comes from the stylesheet, so the canvas follows the theme */
+  const cs = getComputedStyle(document.body);
+  const line  = cs.getPropertyValue('--line').trim();
+  const muted = cs.getPropertyValue('--muted').trim();
+  const stops = ['--ramp-0', '--ramp-1', '--ramp-2', '--ramp-3', '--ramp-4']
+    .map(v => cs.getPropertyValue(v).trim());
+
+  const reading = lastHz ? describe(lastHz) : null;
+  const usable  = reading && !reading.far;
+  const close   = usable && Math.abs(reading.cents) <= SETTLE_CENTS;
+  if (!close) steadyAt = null;                       // strayed: start the clock again
+  else if (steadyAt === null) steadyAt = time;
+  const locked  = close && time - steadyAt >= SETTLE_MS;
+
+  c2d.clearRect(0, 0, W, H);
+  c2d.globalAlpha = 1;          // never inherit a partial alpha from the frame before
+  const mid = H / 2;
+
+  /* fixed reference: the line the string has to sit on */
+  for (const [pos, dash] of [[0, []], [-25, [2, 5]], [25, [2, 5]]]){
+    const y = mid - (pos / 50) * (H / 2 - 12);
+    c2d.strokeStyle = pos === 0 ? muted : line;
+    c2d.setLineDash(dash); c2d.lineWidth = 1;
+    c2d.beginPath(); c2d.moveTo(0, y + .5); c2d.lineTo(W, y + .5); c2d.stroke();
+  }
+  c2d.setLineDash([]);
+
+  const cents = usable ? Math.max(-50, Math.min(50, reading.cents)) : 0;
+  /* Adaptive easing: barely move for a small correction, so a settled reading
+     stops shivering, but close a big gap fast so a new string arrives at once. */
+  const gap = Math.abs(cents - easedCents);
+  easedCents += (cents - easedCents) * Math.min(0.35, 0.075 + gap * 0.012);
+  const offset = -(easedCents / 50) * (H / 2 - 12);
+
+  /* The head of the current sits at the right - that is now - and the wake runs
+     left into the past. Vertical position is still the entire reading; what the
+     wake adds is whether the note HOLDS it. A flat trail means the string
+     settled. One that keeps sinking is a peg slipping or a new string still
+     stretching. One that will not stop waving is a dead string. None of that is
+     visible in an instantaneous number. */
+  const y0    = mid + offset;
+  const off   = Math.abs(easedCents);
+  const swell = usable ? 1.5 + Math.min(off / 50, 1) * 13 : 0;
+  const drift = still.matches ? 0 : time / 1000 * (0.5 + off * 0.075);
+  const TAU   = Math.PI * 2;
+  const tone  = usable ? rampAt(stops, 1 - Math.min(off / 50, 1)) : muted;
+
+  const headW  = Math.min(104, W * 0.32);
+  const trailW = W - headW;
+  const yOf = c => mid - (Math.max(-50, Math.min(50, c)) / 50) * (H / 2 - 12);
+
+  if (usable) wake.push({ t: time, c: easedCents });
+  while (wake.length && time - wake[0].t > WAKE_MS) wake.shift();
+
+  c2d.lineCap = 'round'; c2d.lineJoin = 'round';
+
+  /* the wake, coloured by where the note was at that moment and fading back */
+  if (wake.length > 1){
+    const grad = c2d.createLinearGradient(0, 0, trailW, 0);
+    for (let i = 0; i <= 6; i++){
+      const sample = wake[Math.floor((wake.length - 1) * i / 6)];
+      grad.addColorStop(i / 6, rgba(
+        rampAt(stops, 1 - Math.min(Math.abs(sample.c) / 50, 1)),
+        0.10 + 0.55 * (i / 6)));
+    }
+    c2d.strokeStyle = grad; c2d.lineWidth = 1.8;
+    c2d.beginPath();
+    let prev = null;
+    for (const sample of wake){
+      const x = trailW * (1 - (time - sample.t) / WAKE_MS);
+      const y = yOf(sample.c);
+      if (!prev || sample.t - prev.t > 250) c2d.moveTo(x, y); else c2d.lineTo(x, y);
+      prev = sample;
+    }
+    c2d.stroke();
+  }
+
+  /* the head: the same travelling wave, tapered to a point at both ends so the
+     rightmost pixel is the exact reading and not a moving crest */
+  const crest = (x, cycles, speed, scale) =>
+    Math.sin(Math.PI * x / headW) *
+    swell * scale * Math.sin(x / headW * cycles * TAU - drift * speed);
+
+  if (usable){
+    c2d.globalAlpha = 0.15; c2d.fillStyle = tone;
+    c2d.beginPath();
+    for (let x = 0; x <= headW; x += 3) c2d.lineTo(trailW + x, y0 + crest(x, 2, 1, 1));
+    for (let x = headW; x >= 0; x -= 3) c2d.lineTo(trailW + x, y0 - crest(x, 2, 1, 1));
+    c2d.closePath(); c2d.fill();
+
+    c2d.shadowColor = locked ? tone : 'transparent';
+    c2d.shadowBlur  = locked ? 14 : 0;
+    c2d.strokeStyle = tone;
+    for (const [cycles, speed, scale, width, alpha] of
+         [[1.3, 1.55, 0.42, 1.0, 0.30],
+          [3.3, 0.55, 0.58, 1.3, 0.45],
+          [2.0, 1.00, 1.00, 2.2, 1.00]]){
+      c2d.globalAlpha = alpha; c2d.lineWidth = width;
+      c2d.beginPath();
+      for (let x = 0; x <= headW; x += 2) c2d.lineTo(trailW + x, y0 + crest(x, cycles, speed, scale));
+      c2d.stroke();
+    }
+
+    c2d.globalAlpha = 1; c2d.fillStyle = tone;     // the present, exactly
+    c2d.beginPath(); c2d.arc(W - 3, y0, 3.2, 0, TAU); c2d.fill();
+    c2d.shadowBlur = 0;
+  } else {
+    c2d.strokeStyle = muted; c2d.lineWidth = 1.5;
+    c2d.beginPath(); c2d.moveTo(trailW, y0); c2d.lineTo(W, y0); c2d.stroke();
+  }
+
+  /* readout */
+  const readout = document.getElementById('readout');
+  readout.classList.toggle('dim', !usable);
+  readout.classList.toggle('locked', !!locked);
+  document.getElementById('note').textContent    = usable ? reading.name : '\u2014';
+  document.getElementById('octave').textContent  = usable ? reading.octave : '';
+  document.getElementById('alt').textContent     = usable && reading.alt ? '(' + reading.alt + ')' : '';
+  /* Hz needs no label in any language, and silence needs no word for it */
+  document.getElementById('hz').textContent      = usable
+    ? midiToHz(reading.midi).toFixed(2) + ' Hz' : '\u2014';
+  document.getElementById('offset').textContent =
+      reading && reading.far ? t('noString')
+    : !usable                ? ''
+    : locked                 ? t('inTune')
+    : close                  ? t('settling')        // right, but not yet steady
+    : t(reading.cents > 0 ? 'loosen' : 'tighten')   // the action, not the diagnosis
+        .replace('{n}', Math.abs(Math.round(reading.cents)));
+
+  /* which target is live */
+  strings.classList.toggle('pinning', pinned !== null);
+  for (const el of document.querySelectorAll('.string')){
+    const i  = Number(el.dataset.index);
+    const on = pinned !== null ? i === pinned
+             : usable && Number(el.dataset.midi) === reading.midi;
+    el.classList.toggle('pinned', pinned === i);
+    el.classList.toggle('live', !!on && usable);
+    el.classList.toggle('locked', !!on && locked);
+  }
+}
+
+/* --------------------------------------------------------------- screen on */
+/* A phone dims and locks after a few seconds untouched, which is exactly what
+   happens while both your hands are on the guitar. Held only while listening,
+   released the moment you stop, and re-taken when the page comes back into
+   view because the system drops the lock whenever the page is hidden. */
+let screenLock = null;
+
+async function keepAwake(on){
+  try {
+    if (on){
+      if ('wakeLock' in navigator) screenLock = await navigator.wakeLock.request('screen');
+    } else if (screenLock){
+      await screenLock.release();
+      screenLock = null;
+    }
+  } catch (e) { screenLock = null; }   // unsupported, or refused on low battery
+}
+
+document.addEventListener('visibilitychange', () => {
+  if (document.visibilityState === 'visible' && go.dataset.on === 'true') keepAwake(true);
+});
+
+/* ---------------------------------------------------------- reference tone */
+async function pluck(midi){
+  const ac = await audio();
+  const now = ac.currentTime, hz = midiToHz(midi);
+  const gain = ac.createGain();
+  gain.gain.setValueAtTime(0, now);
+  gain.gain.linearRampToValueAtTime(0.3, now + 0.02);
+  gain.gain.exponentialRampToValueAtTime(0.0001, now + 1.6);
+  gain.connect(ac.destination);
+  [[1, 1], [2, 0.28], [3, 0.1]].forEach(([mult, level]) => {
+    const osc = ac.createOscillator(), g = ac.createGain();
+    osc.frequency.value = hz * mult; g.gain.value = level;
+    osc.connect(g).connect(gain); osc.start(now); osc.stop(now + 1.7);
+  });
+}
+
+/* --------------------------------------------------------------- build DOM */
+const shell   = document.getElementById('shell');
+const strings = document.getElementById('strings');
+const hint    = document.getElementById('hint');
+const go      = document.getElementById('go');
+
+GAUGES.forEach((g, i) => {
+  const b = document.createElement('button');
+  b.className = 'string'; b.dataset.gauge = g; b.dataset.index = i;
+  b.append(document.createElement('em'), document.createElement('span'));   // built, never parsed
+  b.addEventListener('click', () => {
+    pinned = pinned === i ? null : i;          // tap it again to go back to automatic
+    history.length = 0; lastHz = null; suspect.length = 0; tracking = false; wake.length = 0;
+    pluck(Number(b.dataset.midi));             // and hear where it is meant to land
+    if (hint.dataset.tone !== 'warn')
+      say(pinned === null ? t('hintGuitar') : t('hintPinned').replace('{n}', b.dataset.label));
+    applyNaming();
+    paint(performance.now());
+  });
+  strings.appendChild(b);
+});
+
+/* ------------------------------------------------------------ apply choices */
+function say(text, tone){ hint.textContent = text; hint.dataset.tone = tone || ''; }
+
+/* Each option reads "Drop D  .  D A D G B E", so the picker documents itself
+   and needs no translating - the names are names, the notes follow notation. */
+function renderTunings(){
+  const plain = naming === 'latin' ? LATIN : LETTERS;
+  const flats = naming === 'latin' ? LATIN_FLAT : LETTERS_FLAT;
+  const select = document.getElementById('tuning');
+  select.textContent = '';
+  select.appendChild(Object.assign(document.createElement('option'),
+    {value:'free', textContent:t('free')}));      // first, above every group
+  let group = null, holder = null;
+  TUNINGS.forEach((tn, i) => {
+    if (tn.group !== group){
+      group = tn.group;
+      holder = document.createElement('optgroup');
+      holder.label = group;
+      select.appendChild(holder);
+    }
+    const set = tn.flat ? flats : plain;
+    const opt = document.createElement('option');
+    opt.value = i;
+    opt.textContent = tn.name + '  \u00b7  ' +
+      tn.midi.map(m => set[((m % 12) + 12) % 12]).join(' ');
+    holder.appendChild(opt);
+  });
+  select.value = mode === 'free' ? 'free' : String(tuningIndex);
+  select.setAttribute('aria-label', t('aTuning'));
+}
+
+function applyNaming(){
+  shell.dataset.naming = naming;
+  const names   = noteNames();
+  const letters = flatSpelling() ? LETTERS_FLAT : LETTERS;
+  const small = text => Object.assign(document.createElement('small'), {textContent:text});
+  tuning().midi.forEach((m, i) => {
+    const b  = strings.children[i];
+    const pc = ((m % 12) + 12) % 12;
+    b.dataset.midi = m;
+    b.dataset.pc   = pc;
+    /* the thin first string is written lower case; the Latin name follows its
+       case, which is what tells two same-named strings apart on screen */
+    const low     = i === 5;
+    const letter  = low ? letters[pc].toLowerCase() : letters[pc];
+    const primary = naming === 'latin' ? (low ? names[pc].toLowerCase() : names[pc]) : letter;
+    const bracket = naming === 'latin' ? '(' + letter + ')' : '';
+    const span = b.querySelector('span');
+    span.textContent = primary;                       // clears any previous bracket
+    if (bracket) span.appendChild(small(bracket));
+    b.dataset.label = (primary + ' ' + bracket).trim();
+    b.setAttribute('aria-label', t('aPick').replace('{n}', b.dataset.label));
+    b.setAttribute('aria-pressed', String(pinned === i));
+  });
+  renderTunings();
+  const refNote = names[9] + '4' + (naming === 'latin' ? ' (A4)' : '');
+  document.getElementById('ref-label').textContent = refNote;
+  document.getElementById('ref').setAttribute('aria-label', t('aRef').replace('{n}', names[9]));
+}
+
+function renderAbout(){
+  document.getElementById('about-title').textContent = t('aboutTitle');
+  document.getElementById('update').textContent = t('updateBtn');
+  document.getElementById('update-note').textContent = '';
+  const box = document.getElementById('about-body');
+  box.textContent = '';
+  t('about').forEach(([head, body]) => {
+    box.appendChild(Object.assign(document.createElement('h3'), {textContent:head}));
+    box.appendChild(Object.assign(document.createElement('p'),  {textContent:body}));
+  });
+}
+
+function applyLanguage(){
+  document.documentElement.lang = lang;
+  document.getElementById('lang').value = lang;
+  document.getElementById('lang').setAttribute('aria-label', t('aLang'));
+  document.getElementById('ax-sharp').textContent = t('axSharp');
+  document.getElementById('ax-flat').textContent = t('axFlat');
+  canvas.setAttribute('aria-label', t('aMeter'));
+  renderAbout();
+  applyThemeLabel();
+  go.textContent = go.dataset.on === 'true' ? t('stop') : t('start');
+  naming = (I18N[lang] && I18N[lang].notation) || 'letters';
+  applyNaming();
+  say(mode === 'guitar' ? t('hintGuitar') : t('hintFree'));
+  paint(performance.now());
+}
+
+/* The picker is the only mode control there is: 'free' or a tuning index.
+   One list, one decision - what am I tuning to. */
+function selectTarget(value){
+  const free = value === 'free';
+  if (!free) tuningIndex = Number(value) || 0;
+  pinned = null;                         // a chosen string means nothing in a new tuning
+  mode = free ? 'free' : 'guitar';
+  shell.dataset.mode = mode;
+  strings.hidden = free;                 // the six strings mean nothing in free mode
+  if (shimmer) shimmer.frequency.value = MODES[mode].lowpass;
+  history.length = 0; lastHz = null; suspect.length = 0; tracking = false;   // never judge a new target
+  wake.length = 0;                       // and never trail a wake from another string
+  applyNaming();
+  if (hint.dataset.tone !== 'warn') say(free ? t('hintFree') : t('hintGuitar'));
+  paint(performance.now());
+}
+
+/* ------------------------------------------------------------------- theme */
+const swap = document.getElementById('swap');
+const isDark = () => document.documentElement.dataset.theme !== 'light';
+
+function applyThemeLabel(){
+  const label = isDark() ? t('toLight') : t('toDark');
+  swap.setAttribute('aria-label', label);
+  swap.title = label;
+}
+
+/* the browser chrome takes its colour from the stylesheet, not a literal */
+function syncBar(){
+  const bar = document.getElementById('theme-color');
+  if (bar) bar.content = getComputedStyle(document.body).getPropertyValue('--bg').trim();
+}
+
+swap.addEventListener('click', () => {
+  /* held in the page and nowhere else, so it is gone when you close the tab
+     and every visit opens dark */
+  const next = isDark() ? 'light' : 'dark';
+  document.documentElement.dataset.theme = next;
+  applyThemeLabel(); syncBar(); paint(performance.now());
+});
+
+/* -------------------------------------------------------------------- wire */
+document.getElementById('update').addEventListener('click', checkForUpdate);
+document.getElementById('tuning').addEventListener('change', e => selectTarget(e.target.value));
+
+document.getElementById('lang').addEventListener('change', e => {
+  lang = I18N[e.target.value] ? e.target.value : 'en';
+  applyLanguage();
+});
+
+go.addEventListener('click', async () => {
+  if (go.dataset.on === 'true'){
+    stop(); keepAwake(false);
+    go.dataset.on = 'false'; go.textContent = t('start');
+    say(t('stopped'));
+    paint(performance.now());
+    return;
+  }
+  try {
+    go.disabled = true; say(t('micWait'));
+    await listen();
+    go.dataset.on = 'true'; go.textContent = t('stop');
+    keepAwake(true);
+    say(mode === 'guitar' ? t('hintGuitar') : t('hintFree'));
+  } catch (err){
+    say(err && err.name === 'NotAllowedError' ? t('micDenied') : t('micNone'), 'warn');
+  } finally { go.disabled = false; }
+});
+
+document.getElementById('ref').addEventListener('input', e => {
+  const v = parseFloat(e.target.value);
+  if (v >= 392 && v <= 466) a4 = v;
+});
+
+/* Stores the app's own four files on the device so it runs with no connection.
+   Needs https or localhost; anywhere else it quietly does nothing. */
+if ('serviceWorker' in navigator){
+  addEventListener('load', () => navigator.serviceWorker.register('sw.js').catch(() => {}));
+}
+try { localStorage.removeItem('neptuner-theme'); } catch (e) {}   // nothing is kept here
+
+/* The store is never refreshed on its own beyond the browser's own occasional
+   check, so this is how a reader asks for a new version on the spot. */
+async function checkForUpdate(){
+  const note = document.getElementById('update-note');
+  note.textContent = t('updateChecking');
+  try {
+    const reg = await navigator.serviceWorker.getRegistration();
+    if (!reg){ note.textContent = t('updateNone'); return; }
+    await reg.update();
+    note.textContent = (reg.installing || reg.waiting) ? t('updateFound') : t('updateNone');
+  } catch (e){
+    note.textContent = t('updateFail');
+  }
+}
+
+/* pick up the browser's language; the notation comes with it */
+const guess = (navigator.language || 'en').slice(0, 2).toLowerCase();
+if (I18N[guess]) lang = guess;
+/* Galician, Catalan and Basque are no longer translated, and Spanish is a far
+   better guess for those readers than English */
+else if (['gl', 'ca', 'eu'].includes(guess)) lang = 'es';
+strings.hidden = mode !== 'guitar';
+applyLanguage();
+syncBar();
+</script>
+</body>
+</html>
