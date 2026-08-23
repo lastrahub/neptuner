@@ -45,6 +45,10 @@ in a secure context.
 
 ## Updating
 
-Edit the files, raise the number in `CACHE` inside `sw.js`, and upload. A device
-picks the change up the next time the browser checks that file, or immediately
-if the reader presses the update button inside the app.
+Edit the files, then raise the version in **two** places so they match:
+
+- `VERSION` in `index.html` — the number shown at the foot of the app
+- `CACHE` in `sw.js` — the name of the stored copy
+
+A device picks the change up the next time the browser checks that file, or
+immediately if the reader presses *Check for updates* inside the app.
