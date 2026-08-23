@@ -221,6 +221,9 @@
   }
   .update button:hover{color:var(--text)}
   .update span{font-size:12.5px; color:var(--muted); text-align:right}
+  /* quiet through size, not transparency - fading it would cost contrast */
+  .version{margin:14px 0 0; text-align:center; font-family:var(--mono);
+           font-size:10.5px; letter-spacing:.1em; color:var(--muted)}
   .hint[data-tone="warn"]{color:var(--accent)}
 </style>
 </head>
@@ -286,6 +289,8 @@
     <button id="update" type="button"></button>
     <span id="update-note"></span>
   </div>
+
+  <p class="version" id="version"></p>
 
 </main>
 
@@ -404,6 +409,10 @@ const I18N = {
     toLight:'Cambiar al tema claro', toDark:'Cambiar al tema oscuro',
   },
 };
+
+/* Shown at the foot of the page, and repeated as the CACHE name in sw.js so the
+   two cannot drift apart: what the app says it is, is what is stored. */
+const VERSION = '0.9';
 
 let lang = 'en';
 const t = key => (I18N[lang] && I18N[lang][key]) || I18N.en[key];
@@ -1062,6 +1071,8 @@ async function checkForUpdate(){
     note.textContent = t('updateFail');
   }
 }
+
+document.getElementById('version').textContent = 'v' + VERSION;
 
 /* pick up the browser's language; the notation comes with it */
 const guess = (navigator.language || 'en').slice(0, 2).toLowerCase();

@@ -5,10 +5,10 @@
    the network for anything again. That is what lets it work in aeroplane mode,
    and it also means using it leaves no trail of requests behind.
 
-   To publish a change, raise the number in CACHE. A device picks it up the next
+   To publish a change, raise the version in CACHE, and in VERSION inside index.html. A device picks it up the next
    time the browser checks this file, or immediately if the reader presses the
    update button inside the app. */
-const CACHE = 'neptuner-3';
+const CACHE = 'neptuner-0.9';   // same string the app shows at its foot
 const FILES = ['./', './index.html', './manifest.webmanifest', './icon.png'];
 
 self.addEventListener('install', event => {
