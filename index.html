@@ -458,7 +458,10 @@ let diff = null, norm = null, cachedTauMax = -1;
 function detectPitch(buf, sampleRate, minHz, maxHz, mayGuess){
   const tauMax = Math.min(Math.floor(sampleRate / minHz), buf.length >> 1);
   const tauMin = Math.max(2, Math.floor(sampleRate / maxHz));
-  const window = Math.min(2048, buf.length - tauMax);
+  /* More of the buffer averaged into every lag. The span in time is unchanged,
+     so the reading is no slower and no more biased, but each estimate rests on
+     half again as much evidence, which is what lets a faint note still resolve. */
+  const window = Math.min(3072, buf.length - tauMax);
   if (tauMax !== cachedTauMax){
     diff = new Float32Array(tauMax + 2);
     norm = new Float32Array(tauMax + 2);
@@ -512,10 +515,17 @@ function detectPitch(buf, sampleRate, minHz, maxHz, mayGuess){
 
 /* ------------------------------------------------------------------ audio */
 let ctx = null, analyser = null, shimmer = null, samples = null, stream = null, frame = null;
-/* Two levels, not one. It takes a clear pluck to start trusting a note, but far
-   less to keep following one already found, so the reading stops flickering on
-   and off while the string decays across a single threshold. */
-const RMS_OPEN = 0.010, RMS_HOLD = 0.004;
+/* The gate is measured against the room, not against a fixed number. A guitar
+   two metres away arrives quieter than one at arm's length, but it is no less
+   clean, so what matters is how far it stands above the noise rather than how
+   loud it is. The floor follows the quiet moments down quickly and creeps back
+   up slowly, so it settles on whatever the room actually sounds like, and the
+   absolute limits below are only there to stop it chasing itself to zero.
+   Two levels: a clear margin to start trusting a note, much less to keep
+   following one already found. */
+const OPEN_RATIO = 3.0, HOLD_RATIO = 1.6;
+const OPEN_FLOOR = 0.0015, HOLD_FLOOR = 0.0008;
+let noiseFloor = 0.02;
 const CLARITY_MIN = 0.72;    // below this the waveform is not periodic enough
 const JUMP_CENTS  = 300;     // further than this from the current note is suspect
 /* A freshly plucked string sounds sharp and falls as it settles - measurably,
@@ -525,7 +535,7 @@ const JUMP_CENTS  = 300;     // further than this from the current note is suspe
 const SETTLE_CENTS = 3, SETTLE_MS = 300;
 const HOLD_MS = 1100, history = [], suspect = [];
 let lastHz = null, lastSeen = 0, easedCents = 0, tracking = false, steadyAt = null;
-let rmsSmooth = 0, attackAt = -1e9;
+let rmsSmooth = 0, attackAt = -1e9, lastLook = -1e9;
 
 /* A big jump in pitch is only believable if a string was actually struck. A new
    note arrives with an attack - the level rises sharply. The other thing that
@@ -585,7 +595,7 @@ function stop(){
   if (stream) stream.getTracks().forEach(tr => tr.stop());
   stream = null; analyser = null; shimmer = null;
   lastHz = null; tracking = false; history.length = 0; suspect.length = 0;
-  rmsSmooth = 0; attackAt = -1e9;
+  rmsSmooth = 0; attackAt = -1e9; lastLook = -1e9; noiseFloor = 0.02;
 }
 
 function loop(time){
@@ -596,15 +606,23 @@ function loop(time){
   for (let i = 0; i < samples.length; i++) energy += samples[i] * samples[i];
   const rms = Math.sqrt(energy / samples.length);
 
+  /* the room's own level: down quickly, up grudgingly */
+  noiseFloor += (rms - noiseFloor) * (rms < noiseFloor ? 0.25 : 0.0008);
+  const openAt = Math.max(OPEN_FLOOR, noiseFloor * OPEN_RATIO);
+  const holdAt = Math.max(HOLD_FLOOR, noiseFloor * HOLD_RATIO);
+
   /* an attack is the level climbing sharply out of whatever came before */
   const before = rmsSmooth;
   rmsSmooth += (rms - rmsSmooth) * 0.3;
-  if (rmsSmooth > RMS_OPEN && rmsSmooth > before * 1.5) attackAt = time;
+  if (rmsSmooth > openAt && rmsSmooth > before * 1.5) attackAt = time;
 
-  const range  = MODES[mode];
-  const strong = rms > RMS_OPEN;
-  if (rms > (tracking ? RMS_HOLD : RMS_OPEN)){
-    const found = detectPitch(samples, ctx.sampleRate, range.minHz, range.maxHz, strong);
+  /* the search costs more than a frame is worth doing sixty times a second, and
+     a string does not change pitch in thirty milliseconds */
+  const range = MODES[mode];
+  if (rms > (tracking ? holdAt : openAt) && time - lastLook >= 30){
+    lastLook = time;
+    const found = detectPitch(samples, ctx.sampleRate, range.minHz, range.maxHz,
+                              rms > openAt * 2);
     if (found && found.clarity >= CLARITY_MIN &&
         found.hz >= range.minHz && found.hz <= range.maxHz){
       accept(found.hz, time);
