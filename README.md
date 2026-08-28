@@ -11,7 +11,7 @@ Live at **https://lastrahub.github.io/neptuner/**
 
 Press **Start listening** and grant the microphone. Two pickers sit at the top:
 **Instrument** and **Tuning**. The tuning picker also holds the three modes that
-are not tunings — free note, intonation and all strings at once — at the top.
+are not tunings — chromatic, intonation and all strings at once — at the top.
 
 ### Tuning mode — the default
 
@@ -33,10 +33,13 @@ Tapping a string also plays its target pitch, so you can tune by ear. While that
 reference tone sounds, microphone analysis pauses so the phone cannot mistake
 its own speaker for the instrument.
 
-### Free note
+### Chromatic
 
-Chromatic. Reports the nearest of the twelve notes in any octave. One note at a
-time — a chord has no single pitch to report.
+Reports the nearest of the twelve notes in any octave. The main readout names
+the detected note and octave, while a compact scale shows the semitone below,
+the detected note and the semitone above — including octave changes such as
+**B3 · C4 · C♯4**. Frequency in hertz and the distance in cents remain visible.
+Play one note at a time: a chord has no single pitch to report.
 
 ### Intonation check
 

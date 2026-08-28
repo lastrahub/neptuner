@@ -1,4 +1,4 @@
-# NepTuner 0.24 validation
+# NepTuner 0.25 validation
 
 Last run: 2026-08-28
 
@@ -13,12 +13,13 @@ node tests/run.mjs
 Current result:
 
 ~~~text
-NepTuner v0.24 validation passed
+NepTuner v0.25 validation passed
   preset tunings: 33
   pitch cases: 138
   worst synthetic pitch error: 0.187 cents
   lowest synthetic clarity: 0.9995
   polyphonic direction and missing-string checks: passed
+  chromatic naming and neighbour-octave checks: passed
 ~~~
 
 The 138 single-note cases cover every preset target used by guitar, bass,
@@ -41,6 +42,8 @@ The same run also checks:
 - custom-link range validation and use of the browser History API;
 - use of fresh readings for lock;
 - display of detected rather than target Hz;
+- chromatic naming in both languages, octave labels and confinement of the
+  neighbouring-note scale to chromatic mode;
 - stable multi-reading capture and octave enforcement in intonation mode.
 
 ## What this does not establish
@@ -57,7 +60,7 @@ accuracy on a real instrument or phone. In particular, they do not reproduce:
 - the exact low-E-harmonic collisions affecting the B and high-E estimates in
   all-strings mode.
 
-For that reason, NepTuner 0.24 does not publish a universal percentage accuracy
+For that reason, NepTuner 0.25 does not publish a universal percentage accuracy
 for all-strings mode or claim a real-world worst-case error of 0.05 cents.
 
 ## Real-device protocol

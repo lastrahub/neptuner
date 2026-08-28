@@ -205,6 +205,29 @@
   .readout.locked .pitch b{color:var(--green)}
   .panel.locked{border-color:var(--green); background-color:var(--wash)}
 
+  /* Chromatic mode alone gets a small slice of the scale. The detected note
+     stays centred, with one semitone on either side, so its octave and place
+     in the chromatic sequence are visible without crowding the guided tuner. */
+  .chromatic-scale{
+    position:relative; display:grid; grid-template-columns:repeat(3, 1fr);
+    padding-top:14px; margin:-2px 0 1px;
+    color:var(--muted); font-family:var(--mono); font-size:11.5px;
+  }
+  .chromatic-scale::before{
+    content:""; position:absolute; top:4px; left:16.667%; right:16.667%;
+    height:1px; background:var(--line);
+  }
+  .chromatic-scale span{position:relative; text-align:center; white-space:nowrap}
+  .chromatic-scale span::before{
+    content:""; position:absolute; left:50%; top:-12.5px; width:3px; height:3px;
+    border-radius:50%; background:var(--muted); transform:translateX(-50%);
+  }
+  .chromatic-scale .current{color:var(--text); font-size:13px; font-weight:600}
+  .chromatic-scale .current::before{
+    top:-14.5px; width:7px; height:7px; background:currentColor;
+  }
+  .panel.locked .chromatic-scale .current{color:var(--green)}
+
   .meter{display:flex; gap:12px; align-items:stretch}
   canvas{flex:1; width:100%; height:148px; display:block; touch-action:none}
   .axis{width:64px; display:flex; flex-direction:column; justify-content:space-between;
@@ -413,6 +436,9 @@
         <strong id="offset"></strong>
         <span id="hz">&mdash;</span>
       </div>
+    </div>
+    <div class="chromatic-scale" id="chromatic-scale" aria-hidden="true" hidden>
+      <span>&mdash;</span><span class="current">&mdash;</span><span>&mdash;</span>
     </div>
     <div class="meter">
       <canvas id="wave"></canvas>
@@ -630,13 +656,13 @@ const noteNames = () => flatSpelling()
 
 const I18N = {
   en:{
-    notation:'letters', free:'Free note', inTune:'in tune', settling:'hold\u2026', loosen:'loosen {n} cents', tighten:'tighten {n} cents',
+    notation:'letters', free:'Chromatic', inTune:'in tune', settling:'hold\u2026', loosen:'loosen {n} cents', tighten:'tighten {n} cents',
     noString:'no string near', pickString:'pick the string',
     axSharp:'sharp', axFlat:'flat',
     start:'Start listening', stop:'Stop listening',
     hintGuitar:'Pluck a string and let it ring. Tap one below to tune that string alone.',
     hintPinned:'Tuning the {n} string only. Tap it again for automatic.',
-    hintFree:'Play one note at a time. A chord has no single pitch to report.',
+    hintFree:'Play one note at a time, not a chord. The octave and neighbouring semitones appear above the meter.',
     custom:'Custom',
     customPick:'choose a string above',
     customNote:'{n} \u2014 set its note',
@@ -693,13 +719,13 @@ const I18N = {
     toLight:'Switch to light theme', toDark:'Switch to dark theme',
   },
   es:{
-    notation:'latin', free:'Nota libre', inTune:'afinada', settling:'sost\u00e9n\u2026', loosen:'afloja {n} cents', tighten:'aprieta {n} cents',
+    notation:'latin', free:'Crom\u00e1tico', inTune:'afinada', settling:'sost\u00e9n\u2026', loosen:'afloja {n} cents', tighten:'aprieta {n} cents',
     noString:'ninguna cuerda cerca', pickString:'elige la cuerda',
     axSharp:'alta', axFlat:'baja',
     start:'Empezar a escuchar', stop:'Dejar de escuchar',
     hintGuitar:'Pulsa una cuerda y d\u00e9jala sonar. Toca una abajo para afinar solo esa.',
     hintPinned:'Afinando solo la cuerda {n}. T\u00f3cala otra vez para volver al autom\u00e1tico.',
-    hintFree:'Toca una nota cada vez. Un acorde no tiene un tono \u00fanico.',
+    hintFree:'Toca una nota cada vez, no un acorde. La octava y los semitonos contiguos aparecen sobre el medidor.',
     custom:'Personalizada',
     customPick:'elige una cuerda arriba',
     customNote:'{n} \u2014 fija su nota',
@@ -759,7 +785,7 @@ const I18N = {
 
 /* Shown at the foot of the page, and repeated as the CACHE name in sw.js so the
    two cannot drift apart: what the app says it is, is what is stored. */
-const VERSION = '0.24';
+const VERSION = '0.25';
 
 let lang = 'en';
 const t = key => (I18N[lang] && I18N[lang][key]) || I18N.en[key];
@@ -849,6 +875,26 @@ function describe(freq){
     alt:naming === 'latin' ? letters[pc] : '',   // shown in brackets, never instead
     octave:Math.floor(midi / 12) - 1,
   };
+}
+
+/* The scale strip belongs only to the chromatic mode. It deliberately shows
+   three notes rather than all twelve: the current octave boundary remains
+   explicit (B3 C4 C\u266f4), while the meter below already carries the precise
+   position inside the selected semitone. */
+function renderChromaticScale(reading, usable){
+  const scale = document.getElementById('chromatic-scale');
+  scale.hidden = mode !== 'free';
+  if (mode !== 'free') return;
+  const cells = scale.children;
+  for (let i = 0; i < cells.length; i++){
+    if (!usable){
+      cells[i].textContent = '\u2014';
+      continue;
+    }
+    const midi = reading.midi + i - 1;
+    const pc = ((midi % 12) + 12) % 12;
+    cells[i].textContent = noteNames()[pc] + (Math.floor(midi / 12) - 1);
+  }
 }
 
 /* -------------------------------------------------------------- detection */
@@ -1457,6 +1503,7 @@ function paint(time){
   /* readout */
   renderCustom();
   renderIntonation();
+  if (mode === 'free') renderChromaticScale(reading, usable);
   document.getElementById('panel').classList.toggle('locked', !!locked);
   const readout = document.getElementById('readout');
   readout.classList.toggle('dim', !usable);
@@ -1809,6 +1856,7 @@ function selectTarget(value){
   mode = special ? value : 'tuning';
   shell.dataset.mode = mode;
   strings.hidden = mode !== 'tuning';    // the strings mean nothing without a tuning
+  document.getElementById('chromatic-scale').hidden = mode !== 'free';
   applyAudioRange();
   pitchHistory.length = 0; lastHz = null; suspect.length = 0; tracking = false;   // never judge a new target
   wake.length = 0;                       // and never trail a wake from another string
