@@ -1,7 +1,7 @@
 # NepTuner
 
 A tuner for guitar and other string instruments. It runs in a browser, installs
-to the home screen, works with no connection, and stores nothing about you.
+to the home screen, works with no connection, and collects nothing about you.
 
 Live at **https://lastrahub.github.io/neptuner/**
 
@@ -10,8 +10,8 @@ Live at **https://lastrahub.github.io/neptuner/**
 ## Using it
 
 Press **Start listening** and grant the microphone. Two pickers sit at the top:
-**Instrument** and **Tuning**. The tuning picker also holds the two modes that
-are not tunings, at the very top of the list.
+**Instrument** and **Tuning**. The tuning picker also holds the three modes that
+are not tunings — free note, intonation and all strings at once — at the top.
 
 ### Tuning mode — the default
 
@@ -29,7 +29,9 @@ button again to go back to automatic.
 Automatic refuses to guess when the runner-up target is nearly as close as the
 winner. It says **pick the string** instead of inventing an answer.
 
-Tapping a string also plays its target pitch, so you can tune by ear.
+Tapping a string also plays its target pitch, so you can tune by ear. While that
+reference tone sounds, microphone analysis pauses so the phone cannot mistake
+its own speaker for the instrument.
 
 ### Free note
 
@@ -43,10 +45,10 @@ question from whether it is in tune open.
 
 1. Tune the string normally first, or the comparison means nothing.
 2. Choose **Intonation check**.
-3. Play the string **open** and let it ring. It is captured automatically once
-   the pitch holds still.
+3. Play the string **open** and let it ring. It is captured automatically from
+   the median of a sequence of fresh, stable readings.
 4. **Fret the 12th** on that same string and play it, with your usual pressure.
-   Captured the same way.
+   It is captured the same way, but only if the note is actually near the octave.
 5. The verdict says how many cents it misses the octave by, and which way to
    move the saddle: back to lengthen the string if it is sharp, forward to
    shorten it if it is flat.
@@ -65,10 +67,8 @@ error. When they all sit in a row, everything is in tune. Arrows show which way
 each has to go, and the big number is how many are already right.
 
 **It is a check, not a precision tool.** Tune the marked strings in the normal
-mode. Across a wide family of synthesised guitars it gets the verdict
-right 97–99% of the time with a median error under 0.12 cents, but the worst
-case is over 30 cents, so the display shows direction rather than numbers — a
-figure would claim a precision it does not have.
+mode. Harmonic collisions can produce a wrong or missing estimate, so the
+display deliberately shows direction rather than a numeric value.
 
 **A string that was not struck shows nothing.** Its level is compared against the
 strum's own, and anything under a fifth of that is treated as silence rather than
@@ -82,16 +82,14 @@ badly or not at all. That is admitted rather than hidden.
 
 #### Checking whether it actually works
 
-The estimator is validated against synthesised strums, which is a test of the
-code against a model of a guitar rather than against a guitar. The model is
-deliberately hostile — inharmonicity, random brightness and decay, uneven strums,
-muted strings, a false string beating against itself, phone-microphone bass
-roll-off, noisy rooms — and it holds at 97–99% correct verdicts with a median
-error under 0.12 cents. It is still a model.
+The repository includes deterministic synthetic regression tests for the pitch
+detector and the direction reported by the polyphonic estimator. They test the
+code against a signal model rather than against a real instrument, so they guard
+against software regressions but are not a real-world accuracy claim.
 
 **The app carries its own reference instrument, so a real test costs nothing.**
-The single-string mode is accurate to about 0.02 cents and has been used in
-anger; use it as ground truth.
+Use the single-string mode as the practical reference after checking it against
+a trusted tuner on the phone and instrument being tested.
 
 1. Tune all six strings in the normal mode until each locks.
 2. Switch to **All strings at once** and strum. Every mark should sit on the
@@ -112,19 +110,20 @@ something else fails, the model was wrong and this needs revisiting.
 
 ### Custom tuning
 
-The last entry in the tuning list. Tap the string you want to change, then use
+Choose **Custom** near the top of the tuning list. Tap the string you want to
+change, then use
 **−** and **+** to move it a semitone at a time; each step plays the new pitch.
 The range is limited to what that instrument's detector can actually hear.
 
-**The tuning lives in the address bar**, not in storage:
+**The shareable tuning lives in the address bar**:
 
 ```
 lastrahub.github.io/neptuner/#t=guitar-38-45-50-55-57-62
 ```
 
-Nothing is written to the device, and a tuning you invented can be bookmarked,
-put on the home screen, or sent to someone as a link. A malformed link is
-ignored and the app starts normally.
+It can be bookmarked or sent to someone as a link. The app also remembers it
+locally with the other settings for the next launch. A malformed or out-of-range
+link is ignored and the app starts normally.
 
 ### Turn the phone
 
@@ -140,8 +139,11 @@ rotation lock.
   Spanish. Note names follow the language: letters for English, Do-Re-Mi with
   the letter in brackets for Spanish.
 - **A4** — the reference, 392 to 466 Hz.
-- **The half-filled circle** — light or dark. Not remembered; every launch
-  starts dark.
+- **The half-filled circle** — light or dark.
+
+The instrument, tuning, A4 reference, language and theme are remembered in this
+browser. **Reset saved settings** deletes them and returns the next launch to
+the defaults.
 
 ---
 
@@ -164,15 +166,15 @@ stroke per pluck. That trail is the diagnosis:
 
 | Wake | Meaning |
 | --- | --- |
-| flat | the string settled — actually in tune |
-| sinking steadily | a peg slipping, a new string still stretching, or a nut that grabs and releases |
-| never stops waving | a dead or false string; it will not hold, change it |
+| flat | the string appears to have settled |
+| sinking steadily | may suggest a slipping peg, a new string stretching, or a nut that grabs and releases |
+| never stops waving | may suggest beating or a false/degraded string |
 
 **It waits before saying in tune.** A string sounds sharp the instant it is
 plucked and falls as it settles, so the reading only counts once it has held
 within three cents for a third of a second. Until then it says *hold*. Calling
-it at the crossing means tuning to the attack and ending up flat — worth two to
-four cents in practice, which is a hundred times the detector's own error.
+it at the crossing means tuning to the attack and ending up flat by several
+cents in practice.
 
 When it locks, the panel, the note, the guide lines and a single expanding ring
 all agree at once.
@@ -203,18 +205,19 @@ high-pass that keeps a guitar clean would erase the bottom of a bass, and the
 
 ## Privacy
 
-There is nothing to opt out of, because nothing leaves the device.
+There is nothing to opt out of because no personal data or audio leaves the
+device.
 
-- No fonts, icons, scripts or analytics are loaded from anybody else.
+- No fonts, icons, scripts or analytics are loaded from third parties.
 - A `Content-Security-Policy` of `default-src 'none'` and `connect-src 'none'`
-  makes the browser refuse any outgoing connection. Enforced, not promised.
+  blocks programmatic outgoing connections from the page.
 - The microphone feeds the browser's audio engine; the analysis runs on device.
   Audio is never recorded, saved or transmitted.
-- No cookies, no account, no identifiers, no local storage of any kind. Not even
-  the theme.
-- The app's own files are stored on the device so it runs offline. After the
-  first visit, using it sends no request to any server. The browser checks for a
-  new version on its own at most once a day.
+- No cookies, account or identifiers. Instrument, tuning, A4, language, theme
+  and custom tunings are kept locally as device preferences and can be deleted
+  with **Reset saved settings**.
+- The app's own files are stored on the device so it runs offline. The first
+  load and occasional update checks contact only NepTuner's own address.
 
 The only absolute addresses in the source are the Open Graph tags, read by the
 servers of whatever a link is pasted into. The reader's browser never fetches
@@ -228,7 +231,10 @@ them.
 copy of itself at every lag, squares the difference, and looks for the lag where
 that collapses. A cumulative-mean normalisation makes the first dip the true
 period rather than a harmonic. Parabolic interpolation between lags gives
-sub-sample resolution; measured error is about **0.02 cents**, worst case 0.05.
+sub-sample resolution. In the included deterministic synthetic checks, errors
+remain below half a cent across the supported target ranges at 44.1 and 48 kHz.
+Real strings, microphones and rooms dominate the uncertainty, so this is a
+software regression bound rather than a promise of real-world accuracy.
 
 What surrounds the algorithm matters more than the algorithm:
 
@@ -255,6 +261,26 @@ What surrounds the algorithm matters more than the algorithm:
 
 ---
 
+## Validation
+
+Run the deterministic checks with:
+
+```sh
+node tests/run.mjs
+```
+
+They verify version/cache consistency, the 33 preset tunings, install-icon
+dimensions, custom-link safeguards, single-note pitch error at 44.1 and 48 kHz,
+and polyphonic direction on synthetic strums. `VALIDATION.md` records the current
+automated result and the limits of what it establishes.
+
+Real-device validation is still required before publishing a population-wide
+accuracy percentage. `tests/real-device-template.csv` provides a consistent log
+for phones, instruments, strings, flat/sharp trials, missed strings and false
+positives.
+
+---
+
 ## Files
 
 | File | Purpose |
@@ -262,8 +288,14 @@ What surrounds the algorithm matters more than the algorithm:
 | `index.html` | the whole app: markup, styles, audio, detection, drawing |
 | `sw.js` | keeps the files on the device so the tuner runs offline |
 | `manifest.webmanifest` | name, colours, icon and orientation for install |
-| `icon.png` | 512×512 home-screen icon |
+| `icon.svg` | clean vector master for the app icon |
+| `icon.png`, `icon-192.png` | 512×512 and 192×192 install icons |
+| `icon-maskable-512.png` | safe-zone-aware adaptive icon |
+| `apple-touch-icon.png` | 180×180 iOS home-screen icon |
 | `share.png` | 1200×630 card shown when the link is shared |
+| `tests/run.mjs` | deterministic regression checks |
+| `tests/real-device-template.csv` | real-instrument validation log |
+| `VALIDATION.md` | current evidence and explicit limitations |
 | `.nojekyll` | tells GitHub Pages to serve the files untouched |
 
 Serving requires HTTPS or `localhost`: browsers only grant microphone access in
@@ -273,7 +305,7 @@ a secure context.
 
 ## Publishing a change
 
-Edit the files, then raise the version in **two** places so they match:
+Run `node tests/run.mjs`, then raise the version in **two** places so they match:
 
 - `VERSION` in `index.html` — the number shown at the foot of the app
 - `CACHE` in `sw.js` — the name of the stored copy

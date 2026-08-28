@@ -1,15 +1,18 @@
 /* NepTuner offline store.
 
-   The app is four files. They are copied to the device the first time it is
-   opened and served from that copy every time after, so the tuner never asks
-   the network for anything again. That is what lets it work in aeroplane mode,
-   and it also means using it leaves no trail of requests behind.
+   The essential app files are copied to the device the first time it is opened
+   and served from that copy afterwards. That is what lets it work in aeroplane
+   mode. The browser still checks this same origin for updates.
 
    To publish a change, raise the version in CACHE, and in VERSION inside index.html. A device picks it up the next
    time the browser checks this file, or immediately if the reader presses the
    update button inside the app. */
-const CACHE = 'neptuner-0.23';   // same string the app shows at its foot
-const FILES = ['./', './index.html', './manifest.webmanifest', './icon.png'];
+const CACHE = 'neptuner-0.24';   // same string the app shows at its foot
+const FILES = [
+  './', './index.html', './manifest.webmanifest',
+  './icon.svg', './icon.png', './icon-192.png',
+  './icon-maskable-512.png', './apple-touch-icon.png'
+];
 
 self.addEventListener('install', event => {
   event.waitUntil(
@@ -27,8 +30,8 @@ self.addEventListener('activate', event => {
   );
 });
 
-/* Cache only. The network is reached solely if a file is somehow missing from
-   the store, which for these four cannot happen after a successful install. */
+/* Cache first. A same-origin network fallback is used only if an expected file
+   is missing, for example during an interrupted first installation. */
 self.addEventListener('fetch', event => {
   const request = event.request;
   if (request.method !== 'GET') return;

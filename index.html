@@ -1,5 +1,5 @@
 <!DOCTYPE html>
-<html lang="en">
+<html lang="es">
 <head>
 <meta charset="utf-8" />
 <meta name="viewport" content="width=device-width, initial-scale=1" />
@@ -22,8 +22,9 @@
 <meta name="apple-mobile-web-app-capable" content="yes" />
 <meta name="apple-mobile-web-app-title" content="NepTuner" />
 <link rel="manifest" href="manifest.webmanifest" />
-<link rel="apple-touch-icon" href="icon.png" />
-<link rel="icon" href="icon.png" />
+<link rel="apple-touch-icon" href="apple-touch-icon.png" />
+<link rel="icon" href="icon.svg" type="image/svg+xml" />
+<link rel="icon" href="icon-192.png" type="image/png" />
 <title>NepTuner — Afinador de guitarra y otros instrumentos de cuerda</title>
 <meta name="description" content="Afinador cromático para guitarra, bajo, mandolina y ukelele. Drop C, Drop D, DADGAD, Open G y más. Sin conexión, sin anuncios y sin recoger datos." />
 
@@ -35,12 +36,19 @@
 <meta property="og:locale" content="es_ES" />
 <meta property="og:site_name" content="NepTuner" />
 <meta property="og:title" content="NepTuner — Afinador de guitarra y otros instrumentos de cuerda" />
-<meta property="og:description" content="Guitarra, bajo, mandolina y ukelele. Veinte afinaciones. Sin conexión, sin anuncios, sin cuenta y sin recoger ningún dato." />
+<meta property="og:description" content="Guitarra, bajo, mandolina y ukelele. Treinta y tres afinaciones. Sin conexión, sin anuncios, sin cuenta y sin recoger ningún dato." />
 <meta property="og:url" content="https://lastrahub.github.io/neptuner/" />
 <meta property="og:image" content="https://lastrahub.github.io/neptuner/share.png" />
 <meta property="og:image:width" content="1200" />
 <meta property="og:image:height" content="630" />
 <meta name="twitter:card" content="summary_large_image" />
+<script>
+  /* Apply a remembered light theme before first paint, avoiding a dark flash. */
+  try {
+    const savedTheme = JSON.parse(localStorage.getItem('neptuner-settings-v1') || 'null');
+    if (savedTheme && savedTheme.theme === 'light') document.documentElement.dataset.theme = 'light';
+  } catch (e) {}
+</script>
 <style>
   /* One superfamily, one lifted panel, and exactly two saturated colours -
      both of them states of the string, never decoration. Burgundy is "not
@@ -106,7 +114,15 @@
     font-family:var(--sans); font-size:15px; -webkit-font-smoothing:antialiased;
     display:flex; justify-content:center;
   }
-  .shell{width:100%; max-width:520px; padding:26px 20px 40px; display:flex; flex-direction:column; gap:18px}
+  .shell{
+    width:100%; max-width:520px;
+    padding:26px 20px 40px;
+    padding:calc(26px + env(safe-area-inset-top))
+            max(20px, env(safe-area-inset-right))
+            calc(40px + env(safe-area-inset-bottom))
+            max(20px, env(safe-area-inset-left));
+    display:flex; flex-direction:column; gap:18px;
+  }
   :focus-visible{outline:2px solid var(--accent); outline-offset:2px}
   [hidden]{display:none !important}   /* beats .strings{display:grid} */
 
@@ -278,7 +294,15 @@
      button that starts it is never the thing that gets hidden. Turning back
      restores everything; nothing is lost and nothing has to be found again. */
   @media (orientation: landscape) and (max-height: 520px){
-    .shell[data-listening="true"]{max-width:none; height:100svh; padding:10px 16px; gap:8px}
+    .shell[data-listening="true"]{
+      max-width:none; height:100svh;
+      padding:10px 16px;
+      padding:max(10px, env(safe-area-inset-top))
+              max(16px, env(safe-area-inset-right))
+              max(10px, env(safe-area-inset-bottom))
+              max(16px, env(safe-area-inset-left));
+      gap:8px;
+    }
     .shell[data-listening="true"] > .top,
     .shell[data-listening="true"] > .pickers,
     .shell[data-listening="true"] > .action,
@@ -330,17 +354,22 @@
     transition:color .18s;
   }
   .update button:hover{color:var(--text)}
-  .update span{font-size:12.5px; color:var(--muted); text-align:right}
+  .update > span:first-child{font-family:var(--mono); font-size:11.5px; color:var(--muted)}
+  .update > span:last-child{font-size:12.5px; color:var(--muted); text-align:right}
   /* quiet through size, not transparency - fading it would cost contrast */
   .version{margin:14px 0 0; text-align:center; font-family:var(--mono);
            font-size:10.5px; letter-spacing:.1em; color:var(--muted)}
   .hint[data-tone="warn"]{color:var(--accent)}
+  @media (prefers-reduced-motion: reduce){
+    *,*::before,*::after{transition-duration:.01ms !important}
+  }
 </style>
 </head>
 <body>
 <main class="shell" id="shell" data-mode="tuning" data-naming="letters">
 
   <h1 class="sr-only" id="page-title">Afinador de guitarra, bajo, mandolina y ukelele</h1>
+  <p class="sr-only" id="status-live" aria-live="polite" aria-atomic="true"></p>
 
   <header class="top">
     <span class="wordmark">
@@ -378,7 +407,7 @@
   </div>
 
   <section class="panel" id="panel">
-    <div class="readout dim" id="readout" aria-live="polite">
+    <div class="readout dim" id="readout">
       <div class="pitch"><b id="note">&mdash;</b><i><span id="octave"></span><small id="alt"></small></i></div>
       <div class="numbers">
         <strong id="offset"></strong>
@@ -422,7 +451,7 @@
   </details>
 
   <div class="update">
-    <button id="update" type="button"></button>
+    <span><button id="update" type="button"></button> · <button id="reset-settings" type="button"></button></span>
     <span id="update-note"></span>
   </div>
 
@@ -514,25 +543,46 @@ const INSTRUMENTS = [
 ];
 let instIndex = 0, tuningIndex = 0;   // tuningIndex below zero means the custom one
 
-/* One editable tuning per instrument, seeded from its standard. It lives in the
-   address bar rather than in storage: nothing is written to the device, and a
-   tuning you invented can be bookmarked, or sent to someone else as a link. */
+/* One editable tuning per instrument, seeded from its standard. A shareable
+   copy lives in the address bar; the normal local preference also restores it
+   on this device at the next launch. */
 const customTunings = {};
 const customFor = i => customTunings[i.id] || (customTunings[i.id] = i.tunings[0].midi.slice());
 
+function customBounds(i, reference){
+  const ref = reference || a4;
+  return {
+    lo:Math.ceil(69 + 12 * Math.log2(i.minHz / ref) + 3.5),
+    hi:Math.floor(69 + 12 * Math.log2(i.maxHz / ref) - 3.5),
+  };
+}
+
+function validCustomMidi(i, midi, reference){
+  if (!Array.isArray(midi) || midi.length !== i.gauges.length) return false;
+  const {lo, hi} = customBounds(i, reference);
+  return midi.every(v => Number.isInteger(v) && v >= lo && v <= hi);
+}
+
 function writeCustomToUrl(){
   try {
-    history.replaceState(null, '', '#t=' + inst().id + '-' + customFor(inst()).join('-'));
+    window.history.replaceState(null, '', '#t=' + inst().id + '-' + customFor(inst()).join('-'));
   } catch (e) {}
+}
+function clearCustomUrl(){
+  if (!location.hash.startsWith('#t=')) return;
+  try { window.history.replaceState(null, '', location.pathname + location.search); }
+  catch (e) {}
 }
 function readCustomFromUrl(){
   const m = /^#t=([a-z0-9]+)-([\d-]+)$/.exec(location.hash || '');
-  if (!m) return;
+  if (!m) return false;
   const i = INSTRUMENTS.findIndex(x => x.id === m[1]);
-  if (i < 0) return;
+  if (i < 0) return false;
   const midi = m[2].split('-').map(Number);
-  if (midi.length !== INSTRUMENTS[i].gauges.length || midi.some(v => !(v >= 0 && v <= 127))) return;
+  if (!validCustomMidi(INSTRUMENTS[i], midi)) return false;
   instIndex = i; customTunings[m[1]] = midi; tuningIndex = -1;
+  mode = 'tuning';
+  return true;
 }
 /* which string you chose by hand, or null for automatic. Choosing one is the
    only way the tuner can know you mean the 6th when the guitar is still in
@@ -606,8 +656,9 @@ const I18N = {
     micWait:'Waiting for microphone permission\u2026',
     micDenied:'The tuner needs microphone access. Allow it in your browser\u2019s site settings, then start listening again.',
     micNone:'No microphone available on this device.',
+    micBusy:'The microphone could not start. It may be in use by another app or unavailable to the browser.',
     stopped:'Stopped. Nothing is being recorded or sent anywhere.',
-    aPick:'Tune the {n} string', aRef:'{n}4 reference in hertz',
+    aPick:'Select and hear the {n} string', aRef:'{n}4 reference in hertz',
     aMeter:'Pitch deviation shown as a flowing current', aLang:'Interface language',
     lblInstrument:'Instrument', lblTuning:'Tuning',
     instGuitar:'Guitar \u00b7 6 strings', instBass:'Bass \u00b7 4 strings',
@@ -621,17 +672,19 @@ const I18N = {
     updateFound:'Update ready. Close the app and open it again.',
     updateNone:'NepTuner is up to date.',
     updateFail:'Could not check. This step needs a connection.',
+    resetSettings:'Reset saved settings',
+    settingsReset:'Saved settings cleared. Reloading\u2026',
     about:[
       ['The audio stays on the device',
-       'The microphone feeds the browser audio engine and the pitch is worked out on the phone itself. The app contains no instruction capable of sending anything anywhere: no requests, no connections, no background uploads.'],
-      ['No external requests',
-       'Nothing is loaded from anybody else: no fonts, no icons, no scripts, no analytics. A Content-Security-Policy of default-src none and connect-src none makes the browser refuse any outgoing connection, so this is enforced rather than promised.'],
+       'The microphone feeds the browser audio engine and the pitch is worked out on the phone itself. Audio is never recorded, saved or transmitted.'],
+      ['No third-party requests',
+       'Nothing is loaded from anybody else: no fonts, no icons, no scripts and no analytics. The app only contacts its own address to load its files and check for updates; a Content-Security-Policy with connect-src none blocks programmatic outgoing connections from the page.'],
       ['No account and no personal data',
-       'No sign-in, no identifiers, no cookies. No preference is kept either: the theme you pick lasts as long as the tab, and every launch starts in dark.'],
+       'No sign-in, identifiers or cookies. The chosen instrument, tuning, A4 reference, language and theme are remembered only in this browser so the next launch opens as you left it. They never leave the device, and the reset button below deletes them.'],
       ['The microphone',
        'Permission is requested when you press Start listening, and the microphone is released the moment you stop. Audio is never recorded, saved or transmitted.'],
       ['It works with no connection',
-       'The four files that make up the app are stored on the device the first time you open it, and served from there afterwards. It runs in aeroplane mode, and using it sends no requests to any server. The browser checks for updates on its own at most once a day; the button below checks straight away.'],
+       'The essential app files are stored on the device the first time you open it and served from there afterwards. It runs in aeroplane mode. The browser occasionally checks its own address for updates; the button below checks straight away.'],
       ['How the note is detected',
        'It analyses about 4,096 samples and looks for the delay at which the wave matches itself. That delay is the period of the string; the frequency and the distance in cents to the target note follow from it.'],
       ['Why it waits before saying in tune',
@@ -666,8 +719,9 @@ const I18N = {
     micWait:'Esperando permiso del micr\u00f3fono\u2026',
     micDenied:'El afinador necesita acceso al micr\u00f3fono. Perm\u00edtelo en los ajustes del sitio de tu navegador y vuelve a empezar.',
     micNone:'No hay micr\u00f3fono disponible en este dispositivo.',
+    micBusy:'No se pudo iniciar el micr\u00f3fono. Puede estar ocupado por otra aplicaci\u00f3n o no disponible para el navegador.',
     stopped:'Parado. No se graba ni se env\u00eda nada.',
-    aPick:'Afinar la cuerda {n}', aRef:'referencia {n}4 en hercios',
+    aPick:'Seleccionar y escuchar la cuerda {n}', aRef:'referencia {n}4 en hercios',
     aMeter:'Desviaci\u00f3n del tono mostrada como una corriente de agua', aLang:'Idioma de la interfaz',
     lblInstrument:'Instrumento', lblTuning:'Afinaci\u00f3n',
     instGuitar:'Guitarra \u00b7 6 cuerdas', instBass:'Bajo \u00b7 4 cuerdas',
@@ -681,17 +735,19 @@ const I18N = {
     updateFound:'Actualizaci\u00f3n disponible. Cierra la app y vuelve a abrirla.',
     updateNone:'NepTuner est\u00e1 actualizada.',
     updateFail:'No se pudo comprobar. Este paso necesita conexi\u00f3n.',
+    resetSettings:'Restablecer ajustes guardados',
+    settingsReset:'Ajustes guardados eliminados. Recargando\u2026',
     about:[
       ['El audio no sale del dispositivo',
-       'El micr\u00f3fono entra en el motor de audio del navegador y el tono se calcula en el propio tel\u00e9fono. La app no contiene ninguna instrucci\u00f3n capaz de enviar nada a ning\u00fan sitio: ni peticiones, ni conexiones, ni env\u00edos en segundo plano.'],
-      ['Sin peticiones externas',
-       'No se carga nada de terceros: ni fuentes, ni iconos, ni scripts, ni anal\u00edtica. Una Content-Security-Policy con default-src none y connect-src none hace que el navegador rechace cualquier conexi\u00f3n saliente, as\u00ed que est\u00e1 impuesto y no simplemente prometido.'],
+       'El micr\u00f3fono entra en el motor de audio del navegador y el tono se calcula en el propio tel\u00e9fono. El audio nunca se graba, guarda ni transmite.'],
+      ['Sin peticiones a terceros',
+       'No se carga nada de terceros: ni fuentes, ni iconos, ni scripts, ni anal\u00edtica. La app solo contacta con su propia direcci\u00f3n para cargar sus archivos y comprobar actualizaciones; una Content-Security-Policy con connect-src none bloquea las conexiones salientes program\u00e1ticas desde la p\u00e1gina.'],
       ['Sin cuenta y sin datos personales',
-       'Ni registro, ni identificadores, ni cookies. Tampoco se guarda ninguna preferencia: el tema que elijas dura lo que dure la pesta\u00f1a, y cada apertura empieza en oscuro.'],
+       'Ni registro, ni identificadores, ni cookies. El instrumento, la afinaci\u00f3n, la referencia A4, el idioma y el tema se recuerdan solo en este navegador para que la pr\u00f3xima apertura contin\u00fae como la dejaste. Nunca salen del dispositivo y el bot\u00f3n inferior permite borrarlos.'],
       ['El micr\u00f3fono',
        'El permiso se pide al pulsar Empezar a escuchar, y el micr\u00f3fono se libera en cuanto paras. El audio no se graba, ni se guarda, ni se transmite.'],
       ['Funciona sin conexi\u00f3n',
-       'Los cuatro archivos que forman la app se guardan en el dispositivo la primera vez que la abres, y despu\u00e9s se sirven desde ah\u00ed. Funciona en modo avi\u00f3n, y usarla no env\u00eda ninguna petici\u00f3n a ning\u00fan servidor. El navegador comprueba actualizaciones por su cuenta como mucho una vez al d\u00eda; el bot\u00f3n de abajo lo comprueba al momento.'],
+       'Los archivos esenciales de la app se guardan en el dispositivo la primera vez que la abres y despu\u00e9s se sirven desde ah\u00ed. Funciona en modo avi\u00f3n. El navegador comprueba ocasionalmente si hay actualizaciones en la propia direcci\u00f3n de NepTuner; el bot\u00f3n inferior lo comprueba al momento.'],
       ['C\u00f3mo detecta la nota',
        'Analiza unas 4.096 muestras y busca el desfase con el que la onda coincide consigo misma. Ese desfase es el periodo de la cuerda; de ah\u00ed salen la frecuencia y la distancia en cents hasta la nota objetivo.'],
       ['Por qu\u00e9 espera antes de decir afinada',
@@ -703,7 +759,7 @@ const I18N = {
 
 /* Shown at the foot of the page, and repeated as the CACHE name in sw.js so the
    two cannot drift apart: what the app says it is, is what is stored. */
-const VERSION = '0.23';
+const VERSION = '0.24';
 
 let lang = 'en';
 const t = key => (I18N[lang] && I18N[lang][key]) || I18N.en[key];
@@ -712,6 +768,52 @@ const t = key => (I18N[lang] && I18N[lang][key]) || I18N.en[key];
 let mode = 'tuning';
 let a4 = 440;
 const midiToHz = m => a4 * Math.pow(2, (m - 69) / 12);
+const SETTINGS_KEY = 'neptuner-settings-v1';
+
+function loadSettings(){
+  try {
+    const value = JSON.parse(localStorage.getItem(SETTINGS_KEY) || 'null');
+    return value && typeof value === 'object' ? value : null;
+  } catch (e) { return null; }
+}
+
+function applySettings(value){
+  if (!value) return;
+  if (Number.isFinite(value.a4) && value.a4 >= 392 && value.a4 <= 466) a4 = value.a4;
+  const found = INSTRUMENTS.findIndex(i => i.id === value.instrument);
+  if (found >= 0) instIndex = found;
+  if (value.custom && typeof value.custom === 'object'){
+    for (const i of INSTRUMENTS){
+      const midi = value.custom[i.id];
+      if (validCustomMidi(i, midi, a4)) customTunings[i.id] = midi.slice();
+    }
+  }
+  if (['free','intonation','poly'].includes(value.target)) mode = value.target;
+  else {
+    mode = 'tuning';
+    if (value.target === 'custom') tuningIndex = -1;
+    else if (Number.isInteger(value.target) && value.target >= 0 && value.target < inst().tunings.length)
+      tuningIndex = value.target;
+  }
+  if (value.lang === 'en' || value.lang === 'es') lang = value.lang;
+  if (value.theme === 'light') document.documentElement.dataset.theme = 'light';
+  else delete document.documentElement.dataset.theme;
+}
+
+function saveSettings(){
+  const custom = {};
+  for (const i of INSTRUMENTS)
+    if (customTunings[i.id] && validCustomMidi(i, customTunings[i.id], a4))
+      custom[i.id] = customTunings[i.id].slice();
+  const target = mode !== 'tuning' ? mode : (tuningIndex < 0 ? 'custom' : tuningIndex);
+  try {
+    localStorage.setItem(SETTINGS_KEY, JSON.stringify({
+      instrument:inst().id, target, a4, lang,
+      theme:document.documentElement.dataset.theme === 'light' ? 'light' : 'dark',
+      custom,
+    }));
+  } catch (e) {}
+}
 
 function describe(freq){
   const exact = 69 + 12 * Math.log2(freq / a4);
@@ -737,13 +839,14 @@ function describe(freq){
     midi = Math.round(exact);
   }
   const pc = ((midi % 12) + 12) % 12;
+  const letters = flatSpelling() ? LETTERS_FLAT : LETTERS;
   return {
     midi, exact, pc,
     cents:(exact - midi) * 100,
     far:pinned === null && (unsure || Math.abs(exact - midi) > range().reach),
     unsure,
     name:noteNames()[pc],
-    alt:naming === 'latin' ? LETTERS[pc] : '',   // shown in brackets, never instead
+    alt:naming === 'latin' ? letters[pc] : '',   // shown in brackets, never instead
     octave:Math.floor(midi / 12) - 1,
   };
 }
@@ -844,7 +947,9 @@ function detectPitch(buf, sampleRate, minHz, maxHz, mayGuess, step){
    it is shown at all. */
 const POLY_N = 16384, POLY_H1 = 2048, POLY_H2 = 1024;
 const POLY_KEEP = 5, POLY_EVERY = 140, POLY_DISAGREE = 3, POLY_QUIET = 0.20;
+const POLY_HISTORY_MS = 850, POLY_DISPLAY_MS = 1400;
 let polyWindow = null, polyHistory = [], polyResult = [], polyLast = -1e9;
+let polySessionAt = -1e9, polyResultAt = -1e9, polyQuietSince = null, polyArmed = true;
 
 function polyBin(buf, off, f, rate){
   if (!polyWindow || polyWindow.length !== POLY_N){
@@ -875,7 +980,7 @@ function polyPhase(buf, f, hop, rate){
   return { cents: 1200 * Math.log2(hz / f), mag: Math.hypot(r1, i1) };
 }
 
-function measurePoly(buf, rate){
+function measurePoly(buf, rate, time){
   const targets = tuning().midi;
   if (polyHistory.length !== targets.length) polyHistory = targets.map(() => []);
   targets.forEach((m, i) => {
@@ -886,9 +991,10 @@ function measurePoly(buf, rate){
     /* the two spacings must agree, and the answer must be in a range a string
        could plausibly be in, or this window says nothing */
     if (Math.abs(a.cents - b.cents) < POLY_DISAGREE && Math.abs(a.cents) < 60){
-      h.push({ cents:a.cents, mag:a.mag });
+      h.push({ cents:a.cents, mag:a.mag, t:time });
       if (h.length > POLY_KEEP) h.shift();
     }
+    while (h.length && time - h[0].t > POLY_HISTORY_MS) h.shift();
   });
   const mid = arr => [...arr].sort((x, y) => x - y)[arr.length >> 1];
   polyResult = polyHistory.map(h => h.length >= 2
@@ -905,9 +1011,19 @@ function measurePoly(buf, rate){
     const floor = mid(level) * POLY_QUIET;
     polyResult.forEach(r => { if (r.mag < floor){ r.cents = null; r.sure = false; } });
   }
+  polyResultAt = time;
 }
 
-function resetPoly(){ polyHistory = []; polyResult = []; polyLast = -1e9; }
+function beginPolyStrum(time){
+  polyHistory = tuning().midi.map(() => []);
+  polyResult = []; polyLast = -1e9; polyResultAt = -1e9;
+  polySessionAt = time; polyQuietSince = null; polyArmed = false;
+}
+
+function resetPoly(){
+  polyHistory = []; polyResult = []; polyLast = -1e9;
+  polySessionAt = -1e9; polyResultAt = -1e9; polyQuietSince = null; polyArmed = true;
+}
 
 /* ------------------------------------------------------------------ audio */
 let ctx = null, analyser = null, rumble = null, shimmer = null;
@@ -948,9 +1064,10 @@ const JUMP_CENTS  = 300;     // further than this from the current note is suspe
    crosses the centre means calling it during that fall, and you end up flat.
    So the lock waits: the note has to stay inside this band for this long. */
 const SETTLE_CENTS = 3, SETTLE_MS = 300;
-const HOLD_MS = 1100, history = [], suspect = [];
+const FRESH_MS = 120, HOLD_MS = 1100, pitchHistory = [], suspect = [];
 let lastHz = null, lastSeen = 0, easedCents = 0, tracking = false, steadyAt = null;
 let rmsSmooth = 0, attackAt = -1e9, lastLook = -1e9, lockedAt = null, wasLocked = false;
+let ignoreInputUntil = -1e9;
 
 /* A big jump in pitch is only believable if a string was actually struck. A new
    note arrives with an attack - the level rises sharply. The other thing that
@@ -969,16 +1086,17 @@ function accept(hz, time){
       if (suspect.length < 3) return;
       const spread = Math.abs(1200 * Math.log2(suspect[0] / suspect[suspect.length - 1]));
       if (spread > 120){ suspect.length = 0; return; }   // they disagree: it was noise
-      history.length = 0;                                // they agree: a real change
+      pitchHistory.length = 0;                           // they agree: a real change
     }
   }
   suspect.length = 0;
-  history.push(hz);
-  if (history.length > 7) history.shift();
-  const sorted = [...history].sort((a, b) => a - b);
+  pitchHistory.push(hz);
+  if (pitchHistory.length > 7) pitchHistory.shift();
+  const sorted = [...pitchHistory].sort((a, b) => a - b);
   lastHz = sorted[sorted.length >> 1];       // the median, never the latest sample
   lastSeen = time;
   tracking = true;
+  if (mode === 'intonation') watchIntonation(lastHz, time);
 }
 
 async function audio(){
@@ -1008,9 +1126,10 @@ function stop(){
   cancelAnimationFrame(frame); frame = null;
   if (stream) stream.getTracks().forEach(tr => tr.stop());
   stream = null; analyser = null; rumble = null; shimmer = null;
-  lastHz = null; tracking = false; history.length = 0; suspect.length = 0;
+  lastHz = null; tracking = false; pitchHistory.length = 0; suspect.length = 0;
   rmsSmooth = 0; attackAt = -1e9; lastLook = -1e9; noiseFloor = 0.02;
-  lockedAt = null; wasLocked = false;
+  lockedAt = null; wasLocked = false; steadyAt = null; easedCents = 0;
+  wake.length = 0; resetPoly();
 }
 
 function loop(time){
@@ -1021,6 +1140,10 @@ function loop(time){
   for (let i = 0; i < samples.length; i++) energy += samples[i] * samples[i];
   const rms = Math.sqrt(energy / samples.length);
 
+  /* A reference tone played by the app must not be mistaken for the instrument.
+     Ignore the microphone, including the room-floor estimate, until it ends. */
+  if (time < ignoreInputUntil){ paint(time); return; }
+
   /* the room's own level: down quickly, up grudgingly */
   noiseFloor += (rms - noiseFloor) * (rms < noiseFloor ? 0.25 : 0.0008);
   const openAt = Math.max(OPEN_FLOOR, noiseFloor * OPEN_RATIO);
@@ -1029,15 +1152,23 @@ function loop(time){
   /* an attack is the level climbing sharply out of whatever came before */
   const before = rmsSmooth;
   rmsSmooth += (rms - rmsSmooth) * 0.3;
-  if (rmsSmooth > openAt && rmsSmooth > before * 1.5) attackAt = time;
+  const sawAttack = rmsSmooth > openAt && rmsSmooth > before * 1.5;
+  if (sawAttack) attackAt = time;
 
   /* the search costs more than a frame is worth doing sixty times a second, and
      a string does not change pitch in thirty milliseconds */
   if (mode === 'poly'){
+    if (rms < holdAt){
+      if (polyQuietSince === null) polyQuietSince = time;
+      else if (time - polyQuietSince > 300) polyArmed = true;
+    } else polyQuietSince = null;
+    if ((sawAttack && (polyArmed || time - polySessionAt > 800)) ||
+        (polyArmed && rms > openAt)) beginPolyStrum(time);
     if (rms > openAt && time - polyLast >= POLY_EVERY){
       polyLast = time;
-      measurePoly(samples, ctx.sampleRate);
+      measurePoly(samples, ctx.sampleRate, time);
     }
+    if (time - polyResultAt > POLY_DISPLAY_MS) polyResult = [];
     paint(time);
     return;
   }
@@ -1052,10 +1183,9 @@ function loop(time){
       accept(found.hz, time);
     }
   }
-  if (mode === 'intonation' && lastHz) watchIntonation(lastHz, time);
   if (lastHz && time - lastSeen > HOLD_MS){
     lastHz = null; tracking = false;
-    history.length = 0; suspect.length = 0;
+    pitchHistory.length = 0; suspect.length = 0;
   }
   paint(time);
 }
@@ -1081,6 +1211,19 @@ size();
    starts a new stroke - one trace per pluck. */
 const WAKE_MS = 6000;
 const wake = [];
+
+/* The visual readout changes every frame; exposing that element as aria-live
+   would make a screen reader speak continuously. This separate channel only
+   announces a changed note, a five-cent action step, or a lock. */
+let announcedKey = '', announcedAt = -1e9;
+function announceStatus(text, key, time, urgent){
+  if (!text || key === announcedKey) return;
+  if (!urgent && time - announcedAt < 700) return;
+  const live = document.getElementById('status-live');
+  if (!live) return;
+  live.textContent = text;
+  announcedKey = key; announcedAt = time;
+}
 
 /* two hex colours blended channel by channel */
 function mix(a, b, u){
@@ -1138,9 +1281,8 @@ function paintPoly(time){
     c2d.textAlign = 'center';
 
     if (!r || r.cents === null){
-      c2d.fillStyle = muted; c2d.globalAlpha = .45;
-      c2d.beginPath(); c2d.arc(cx, mid, 2, 0, Math.PI * 2); c2d.fill();
-      c2d.globalAlpha = 1;
+      /* No mark means no reading. A dot on the centre line can look like a
+         perfectly tuned string from a distance, even when it is only silence. */
     } else {
       read++;
       const c = Math.max(-50, Math.min(50, r.cents));
@@ -1176,6 +1318,8 @@ function paintPoly(time){
   document.getElementById('hz').textContent     = '';
   document.getElementById('offset').textContent =
     read ? t('polyOf').replace('{n}', lanes) : t('polyStrum');
+  const spoken = read ? inTune + ' ' + t('polyOf').replace('{n}', lanes) : t('polyStrum');
+  announceStatus(spoken, 'poly:' + read + ':' + inTune, time, read > 0 && inTune === lanes);
   renderCustom(); renderIntonation();
 }
 
@@ -1190,7 +1334,8 @@ function paint(time){
   if (mode === 'poly'){ paintPoly(time); return; }
   const reading = lastHz ? describe(lastHz) : null;
   const usable  = reading && !reading.far;
-  const close   = usable && Math.abs(reading.cents) <= SETTLE_CENTS;
+  const fresh   = usable && time - lastSeen <= FRESH_MS;
+  const close   = fresh && Math.abs(reading.cents) <= SETTLE_CENTS;
   if (!close) steadyAt = null;                       // strayed: start the clock again
   else if (steadyAt === null) steadyAt = time;
   const locked  = close && time - steadyAt >= SETTLE_MS;
@@ -1236,7 +1381,7 @@ function paint(time){
   const trailW = W - headW;
   const yOf = c => mid - (Math.max(-50, Math.min(50, c)) / 50) * (H / 2 - 12);
 
-  if (usable) wake.push({ t: time, c: easedCents });
+  if (fresh) wake.push({ t: time, c: easedCents });
   while (wake.length && time - wake[0].t > WAKE_MS) wake.shift();
 
   c2d.lineCap = 'round'; c2d.lineJoin = 'round';
@@ -1294,7 +1439,7 @@ function paint(time){
 
     /* one ring, once, at the instant of locking - a moment rather than a state,
        which is what the eye catches without being watched */
-    if (lockedAt !== null){
+    if (lockedAt !== null && !still.matches){
       const age = (time - lockedAt) / 500;
       if (age < 1){
         c2d.globalAlpha = (1 - age) * (1 - age) * 0.6;
@@ -1303,6 +1448,7 @@ function paint(time){
         c2d.globalAlpha = 1;
       } else lockedAt = null;
     }
+    if (still.matches) lockedAt = null;
   } else {
     c2d.strokeStyle = muted; c2d.lineWidth = 1.5;
     c2d.beginPath(); c2d.moveTo(trailW, y0); c2d.lineTo(W, y0); c2d.stroke();
@@ -1320,8 +1466,8 @@ function paint(time){
   document.getElementById('alt').textContent     = usable && reading.alt ? '(' + reading.alt + ')' : '';
   /* Hz needs no label in any language, and silence needs no word for it */
   document.getElementById('hz').textContent      = usable
-    ? midiToHz(reading.midi).toFixed(2) + ' Hz' : '\u2014';
-  document.getElementById('offset').textContent =
+    ? lastHz.toFixed(2) + ' Hz' : '\u2014';
+  const offsetText =
       reading && reading.far ? t(reading.unsure ? 'pickString' : 'noString')
     : !usable                ? ''
     /* Setting intonation needs the number itself, to a tenth, and needs it at
@@ -1333,6 +1479,12 @@ function paint(time){
     : close                  ? t('settling')        // right, but not yet steady
     : t(reading.cents > 0 ? 'loosen' : 'tighten')   // the action, not the diagnosis
         .replace('{n}', Math.abs(Math.round(reading.cents)));
+  document.getElementById('offset').textContent = offsetText;
+  if (usable){
+    const bucket = Math.round(reading.cents / 5) * 5;
+    const key = 'pitch:' + reading.midi + ':' + (locked ? 'locked' : close ? 'close' : bucket);
+    announceStatus(reading.name + reading.octave + ', ' + offsetText, key, time, locked);
+  }
 
   /* which target is live */
   strings.classList.toggle('pinning', pinned !== null);
@@ -1375,13 +1527,13 @@ document.addEventListener('visibilitychange', () => {
 function stepCustom(delta){
   if (pinned === null || tuningIndex >= 0) return;
   const i = inst(), arr = customFor(i);
-  const lo = Math.ceil(69 + 12 * Math.log2(i.minHz / a4) + 3.5);
-  const hi = Math.floor(69 + 12 * Math.log2(i.maxHz / a4) - 3.5);
+  const {lo, hi} = customBounds(i);
   const next = arr[pinned] + delta;
   if (next < lo || next > hi) return;
   arr[pinned] = next;
   writeCustomToUrl();
-  history.length = 0; lastHz = null; suspect.length = 0; tracking = false; wake.length = 0;
+  saveSettings();
+  pitchHistory.length = 0; lastHz = null; suspect.length = 0; tracking = false; wake.length = 0;
   applyAudioRange();
   applyNaming();
   pluck(next);                      // hear where it now sits
@@ -1410,25 +1562,45 @@ function renderCustom(){
    to move back and lengthen it. Flat means the opposite. Naming the action
    rather than the symptom matters even more here than when tuning: "sharp at
    the twelfth" is a fact a beginner cannot act on. */
-const STEADY_CENTS = 2, STEADY_MS = 400, INTONATION_OK = 2;
+const STEADY_CENTS = 2, STEADY_MS = 500, STEADY_SAMPLES = 8;
+const OCTAVE_TOLERANCE = 80, INTONATION_OK = 2;
 let openHz = null, fretHz = null;
-let steadyRef = null, steadyRefAt = null;
+let steadySamples = [];
 
 function resetIntonation(){
-  openHz = fretHz = null; steadyRef = null; steadyRefAt = null;
+  openHz = fretHz = null; steadySamples = [];
 }
 
-/* Watches for the pitch to stop moving, which is what makes the capture
-   automatic instead of another button to press with both hands on the guitar. */
+const median = values => {
+  const sorted = [...values].sort((a, b) => a - b);
+  const n = sorted.length;
+  return n & 1 ? sorted[n >> 1] : (sorted[n / 2 - 1] + sorted[n / 2]) / 2;
+};
+
+/* Capture is advanced only by fresh accepted detector readings. A held copy of
+   the last frequency can never masquerade as half a second of stability. The
+   geometric median averages in pitch space, and the second note must really be
+   the octave rather than merely "some other note". */
 function watchIntonation(hz, time){
-  if (steadyRef === null || Math.abs(1200 * Math.log2(hz / steadyRef)) > STEADY_CENTS){
-    steadyRef = hz; steadyRefAt = time; return;
+  if (fretHz !== null) return;
+  if (openHz !== null){
+    const interval = 1200 * Math.log2(hz / openHz);
+    if (Math.abs(interval - 1200) > OCTAVE_TOLERANCE){ steadySamples = []; return; }
   }
-  if (time - steadyRefAt < STEADY_MS) return;
-  if (openHz === null){ openHz = steadyRef; return; }
-  /* the second reading has to be a different note, or one long ring would fill
-     both slots with the same pitch */
-  if (fretHz === null && Math.abs(1200 * Math.log2(steadyRef / openHz)) > 600) fretHz = steadyRef;
+  if (steadySamples.length && time - steadySamples[steadySamples.length - 1].t > FRESH_MS * 2)
+    steadySamples = [];
+  const centre = steadySamples.length
+    ? Math.exp(median(steadySamples.map(v => Math.log(v.hz)))) : hz;
+  if (Math.abs(1200 * Math.log2(hz / centre)) > STEADY_CENTS)
+    steadySamples = [];
+  steadySamples.push({hz, t:time});
+  if (steadySamples.length > 30) steadySamples.shift();
+  if (steadySamples.length < STEADY_SAMPLES ||
+      time - steadySamples[0].t < STEADY_MS) return;
+  const captured = Math.exp(median(steadySamples.map(v => Math.log(v.hz))));
+  steadySamples = [];
+  if (openHz === null) openHz = captured;
+  else fretHz = captured;
 }
 
 function renderIntonation(){
@@ -1464,7 +1636,10 @@ function renderIntonation(){
 
 /* ---------------------------------------------------------- reference tone */
 async function pluck(midi){
+  lastHz = null; tracking = false; pitchHistory.length = 0; suspect.length = 0;
+  steadyAt = null; wake.length = 0;
   const ac = await audio();
+  ignoreInputUntil = Math.max(ignoreInputUntil, performance.now() + 1900);
   const now = ac.currentTime, hz = midiToHz(midi);
   const gain = ac.createGain();
   gain.gain.setValueAtTime(0, now);
@@ -1496,7 +1671,7 @@ function buildStrings(){
     b.append(document.createElement('em'), document.createElement('span'));
     b.addEventListener('click', () => {
       pinned = pinned === i ? null : i;          // tap it again to go back to automatic
-      history.length = 0; lastHz = null; suspect.length = 0; tracking = false; wake.length = 0;
+      pitchHistory.length = 0; lastHz = null; suspect.length = 0; tracking = false; wake.length = 0;
       applyAudioRange();                         // the band closes in on that string
       pluck(Number(b.dataset.midi));             // and hear where it is meant to land
       if (hint.dataset.tone !== 'warn')
@@ -1509,7 +1684,10 @@ function buildStrings(){
 }
 
 /* ------------------------------------------------------------ apply choices */
-function say(text, tone){ hint.textContent = text; hint.dataset.tone = tone || ''; }
+function say(text, tone){
+  hint.textContent = text; hint.dataset.tone = tone || '';
+  announceStatus(text, 'hint:' + lang + ':' + text, performance.now(), tone === 'warn');
+}
 
 /* Each option reads "Drop D  .  D A D G B E", so the picker documents itself
    and needs no translating - the names are names, the notes follow notation. */
@@ -1591,6 +1769,7 @@ function applyNaming(){
 function renderAbout(){
   document.getElementById('about-title').textContent = t('aboutTitle');
   document.getElementById('update').textContent = t('updateBtn');
+  document.getElementById('reset-settings').textContent = t('resetSettings');
   document.getElementById('update-note').textContent = '';
   const box = document.getElementById('about-body');
   box.textContent = '';
@@ -1631,10 +1810,13 @@ function selectTarget(value){
   shell.dataset.mode = mode;
   strings.hidden = mode !== 'tuning';    // the strings mean nothing without a tuning
   applyAudioRange();
-  history.length = 0; lastHz = null; suspect.length = 0; tracking = false;   // never judge a new target
+  pitchHistory.length = 0; lastHz = null; suspect.length = 0; tracking = false;   // never judge a new target
   wake.length = 0;                       // and never trail a wake from another string
   resetIntonation(); resetPoly();
   applyNaming();
+  if (mode === 'tuning' && tuningIndex < 0) writeCustomToUrl();
+  else clearCustomUrl();
+  saveSettings();
   if (hint.dataset.tone !== 'warn')
     say(t(mode === 'tuning' ? 'hintGuitar' : mode === 'free' ? 'hintFree'
         : mode === 'poly' ? 'hintPoly' : 'hintIntonation'));
@@ -1658,11 +1840,9 @@ function syncBar(){
 }
 
 swap.addEventListener('click', () => {
-  /* held in the page and nowhere else, so it is gone when you close the tab
-     and every visit opens dark */
   const next = isDark() ? 'light' : 'dark';
   document.documentElement.dataset.theme = next;
-  applyThemeLabel(); syncBar(); paint(performance.now());
+  applyThemeLabel(); syncBar(); paint(performance.now()); saveSettings();
 });
 
 /* -------------------------------------------------------------------- wire */
@@ -1673,11 +1853,13 @@ document.getElementById('instrument').addEventListener('change', e => {
   instIndex = Number(e.target.value) || 0;
   tuningIndex = 0; pinned = null; mode = 'tuning';
   shell.dataset.mode = mode; strings.hidden = false;
-  history.length = 0; lastHz = null; suspect.length = 0; tracking = false; wake.length = 0;
+  pitchHistory.length = 0; lastHz = null; suspect.length = 0; tracking = false; wake.length = 0;
   buildStrings();
+  clearCustomUrl();
   applyAudioRange();
   applyNaming();
   if (hint.dataset.tone !== 'warn') say(t('hintGuitar'));
+  saveSettings();
   paint(performance.now());
 });
 
@@ -1689,11 +1871,18 @@ document.getElementById('again').addEventListener('click', () => {
 });
 
 document.getElementById('update').addEventListener('click', checkForUpdate);
+document.getElementById('reset-settings').addEventListener('click', () => {
+  try { localStorage.removeItem(SETTINGS_KEY); } catch (e) {}
+  clearCustomUrl();
+  document.getElementById('update-note').textContent = t('settingsReset');
+  setTimeout(() => location.reload(), 350);
+});
 document.getElementById('tuning').addEventListener('change', e => selectTarget(e.target.value));
 
 document.getElementById('lang').addEventListener('change', e => {
   lang = I18N[e.target.value] ? e.target.value : 'en';
   applyLanguage();
+  saveSettings();
 });
 
 go.addEventListener('click', async () => {
@@ -1714,21 +1903,26 @@ go.addEventListener('click', async () => {
     say(t(mode === 'tuning' ? 'hintGuitar' : mode === 'free' ? 'hintFree'
         : mode === 'poly' ? 'hintPoly' : 'hintIntonation'));
   } catch (err){
-    say(err && err.name === 'NotAllowedError' ? t('micDenied') : t('micNone'), 'warn');
+    const name = err && err.name;
+    say(name === 'NotAllowedError' || name === 'SecurityError' ? t('micDenied')
+      : name === 'NotFoundError' ? t('micNone') : t('micBusy'), 'warn');
   } finally { go.disabled = false; }
 });
 
 document.getElementById('ref').addEventListener('input', e => {
   const v = parseFloat(e.target.value);
-  if (v >= 392 && v <= 466) a4 = v;
+  if (v >= 392 && v <= 466){
+    a4 = v; applyAudioRange(); paint(performance.now()); saveSettings();
+  }
 });
 
-/* Stores the app's own four files on the device so it runs with no connection.
+/* Stores the app's essential files on the device so it runs with no connection.
    Needs https or localhost; anywhere else it quietly does nothing. */
 if ('serviceWorker' in navigator){
-  addEventListener('load', () => navigator.serviceWorker.register('sw.js').catch(() => {}));
+  addEventListener('load', () => navigator.serviceWorker
+    .register('sw.js', {updateViaCache:'none'}).catch(() => {}));
 }
-try { localStorage.removeItem('neptuner-theme'); } catch (e) {}   // nothing is kept here
+try { localStorage.removeItem('neptuner-theme'); } catch (e) {}   // remove the pre-0.24 key
 
 /* The store is never refreshed on its own beyond the browser's own occasional
    check, so this is how a reader asks for a new version on the spot. */
@@ -1738,16 +1932,17 @@ async function checkForUpdate(){
   try {
     const reg = await navigator.serviceWorker.getRegistration();
     if (!reg){ note.textContent = t('updateNone'); return; }
+    let found = false;
+    const onFound = () => { found = true; };
+    reg.addEventListener('updatefound', onFound);
     await reg.update();
-    note.textContent = (reg.installing || reg.waiting) ? t('updateFound') : t('updateNone');
+    await new Promise(resolve => setTimeout(resolve, 250));
+    reg.removeEventListener('updatefound', onFound);
+    note.textContent = (found || reg.installing || reg.waiting) ? t('updateFound') : t('updateNone');
   } catch (e){
     note.textContent = t('updateFail');
   }
 }
-
-readCustomFromUrl();          // a link may carry an instrument and a tuning
-buildStrings();
-document.getElementById('version').textContent = 'v' + VERSION;
 
 /* pick up the browser's language; the notation comes with it */
 const guess = (navigator.language || 'en').slice(0, 2).toLowerCase();
@@ -1755,9 +1950,16 @@ if (I18N[guess]) lang = guess;
 /* Galician, Catalan and Basque are no longer translated, and Spanish is a far
    better guess for those readers than English */
 else if (['gl', 'ca', 'eu'].includes(guess)) lang = 'es';
+applySettings(loadSettings());
+const customFromLink = readCustomFromUrl();  // a link overrides the saved instrument and target
+buildStrings();
+document.getElementById('version').textContent = 'v' + VERSION;
+document.getElementById('ref').value = String(a4);
+shell.dataset.mode = mode;
 strings.hidden = mode !== 'tuning';
 applyLanguage();
 syncBar();
+if (customFromLink) saveSettings();
 </script>
 </body>
 </html>
