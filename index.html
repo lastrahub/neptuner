@@ -208,7 +208,7 @@
   .string:active{color:var(--text); border-color:var(--text); background:var(--tint-press)}
   .string span{display:flex; flex-direction:column; align-items:center; gap:2px}
   .string em{display:block; width:1px; height:24px; background:currentColor; border-radius:1px; font-style:normal}
-  .string[data-gauge="6"] em{width:4px} .string[data-gauge="5"] em{width:3.2px}
+  .string[data-gauge="7"] em{width:4.8px} .string[data-gauge="6"] em{width:4px} .string[data-gauge="5"] em{width:3.2px}
   .string[data-gauge="4"] em{width:2.5px} .string[data-gauge="3"] em{width:2px}
   .string[data-gauge="2"] em{width:1.4px} .string[data-gauge="1"] em{width:1px}
   .string.pinned{color:var(--text); border-color:var(--text)}
@@ -218,6 +218,49 @@
 
   /* size, not transparency, marks the secondary name - opacity would cost contrast */
   .string small{display:block; font-size:.86em; font-weight:400}
+
+  /* Only in the custom tuning, and only once a string is chosen: the same tap
+     that narrows the detector onto a string is the one that says which string
+     you are about to redefine. */
+  .custom{display:grid; grid-template-columns:56px 1fr 56px; gap:7px; align-items:stretch}
+  .custom button{
+    background:none; border:1px solid var(--line); border-radius:8px; cursor:pointer;
+    color:var(--muted); font-family:var(--mono); font-size:17px; padding:10px 0;
+    transition:color .18s, border-color .18s;
+  }
+  .custom button:hover:not(:disabled){color:var(--text); border-color:var(--muted)}
+  .custom button:disabled{opacity:.4; cursor:default}
+  .custom span{
+    display:flex; align-items:center; justify-content:center; text-align:center;
+    font-family:var(--mono); font-size:12.5px; color:var(--muted);
+    border:1px solid var(--line); border-radius:8px; padding:0 10px;
+  }
+
+  /* the count of strings already right takes the big slot, since there is no
+     single note to name */
+  .shell[data-mode="poly"] .pitch b{font-size:clamp(52px,15vw,84px)}
+  .shell[data-mode="poly"] canvas{height:172px}
+
+  .intonation{display:flex; flex-direction:column; gap:10px}
+  .slots{display:grid; grid-template-columns:1fr 1fr; gap:7px}
+  .slot{
+    border:1px solid var(--line); border-radius:8px; padding:11px 12px;
+    display:flex; flex-direction:column; gap:5px; min-height:66px;
+    font-family:var(--mono); transition:border-color .2s;
+  }
+  .slot span{font-size:10px; letter-spacing:.1em; text-transform:uppercase; color:var(--muted)}
+  .slot b{font-size:15px; font-weight:600; color:var(--text); letter-spacing:-.01em}
+  .slot.waiting{border-color:var(--muted)}
+  .slot.done{border-color:var(--green)}
+  .slot.done b{color:var(--green)}
+  .verdict{margin:0; font-size:13px; line-height:1.5; color:var(--muted); min-height:38px}
+  .verdict strong{color:var(--text); font-weight:600}
+  .again{
+    background:none; border:1px solid var(--line); border-radius:8px; cursor:pointer;
+    color:var(--muted); font-family:var(--mono); font-size:11px; letter-spacing:.05em;
+    padding:10px; transition:color .18s, border-color .18s;
+  }
+  .again:hover{color:var(--text); border-color:var(--muted)}
 
   /* footer ------------------------------------------------------------- */
   .action{display:flex; flex-direction:column; gap:11px}
@@ -229,6 +272,30 @@
   button.go:hover{opacity:.87}
   button.go[data-on="true"]{background:transparent; color:var(--text); box-shadow:inset 0 0 0 1px var(--line)}
   .hint{margin:0; font-size:13px; line-height:1.55; color:var(--muted); min-height:36px}
+
+  /* Turn the phone while it is listening and the meter takes the whole screen -
+     readable from a music stand, or across a stage. Only while listening, so the
+     button that starts it is never the thing that gets hidden. Turning back
+     restores everything; nothing is lost and nothing has to be found again. */
+  @media (orientation: landscape) and (max-height: 520px){
+    .shell[data-listening="true"]{max-width:none; height:100svh; padding:10px 16px; gap:8px}
+    .shell[data-listening="true"] > .top,
+    .shell[data-listening="true"] > .pickers,
+    .shell[data-listening="true"] > .action,
+    .shell[data-listening="true"] > .about,
+    .shell[data-listening="true"] > .update,
+    .shell[data-listening="true"] > .version{display:none}
+    .shell[data-listening="true"] .panel{flex:1; min-height:0; padding:12px 16px 10px}
+    .shell[data-listening="true"] .readout{min-height:0}
+    .shell[data-listening="true"] .meter{flex:1; min-height:0}
+    .shell[data-listening="true"] canvas{height:100%}
+    .shell[data-listening="true"] .pitch b{font-size:clamp(52px,15vh,120px)}
+    .shell[data-listening="true"][data-naming="latin"] .pitch b{font-size:clamp(34px,10vh,78px)}
+    .shell[data-listening="true"] .numbers{font-size:13px}
+    .shell[data-listening="true"] .numbers strong{font-size:17px}
+    .shell[data-listening="true"] .string{min-height:46px; gap:6px; padding:8px 0 6px}
+    .shell[data-listening="true"] .string em{height:14px}
+  }
 
   /* a native <details>: no script, keyboard accessible, closed by default */
   .about{border-top:1px solid var(--line); padding-top:15px; margin-top:2px}
@@ -329,6 +396,21 @@
 
   <section class="strings" id="strings"></section>
 
+  <div class="custom" id="custom" hidden>
+    <button id="custom-down" type="button">&minus;</button>
+    <span id="custom-note"></span>
+    <button id="custom-up" type="button">+</button>
+  </div>
+
+  <section class="intonation" id="intonation" hidden>
+    <div class="slots">
+      <div class="slot" id="slot-open"><span></span><b>&mdash;</b></div>
+      <div class="slot" id="slot-fret"><span></span><b>&mdash;</b></div>
+    </div>
+    <p class="verdict" id="verdict"></p>
+    <button class="again" id="again" type="button"></button>
+  </section>
+
   <div class="action">
     <button class="go" id="go" data-on="false">Start listening</button>
     <p class="hint" id="hint"></p>
@@ -363,18 +445,43 @@ const LATIN_FLAT   = ['Do','Re\u266D','Re','Mi\u266D','Mi','Fa','Sol\u266D','Sol
    of a bass, and the 85 ms buffer that suits a guitar holds barely two periods
    of one. fft is the buffer length in samples; the bass needs the longer one. */
 const INSTRUMENTS = [
+  /* The floor sits at 44 Hz, not 52, because the low tunings need it: Drop A
+     puts the sixth string at 55 Hz, and a slack one at 45. The high-pass drops
+     with it. Both cost a little noise immunity in standard tuning, which the
+     gate measured against the room absorbs. */
   { id:'guitar', gauges:[6,5,4,3,2,1], fft:4096, step:1,
-    highpass:45, minHz:52, maxHz:450, lowpass:1800, freeMaxHz:1400, freeLowpass:2800,
+    highpass:36, minHz:44, maxHz:450, lowpass:1800, freeMaxHz:1400, freeLowpass:2800,
     tunings:[
-      {name:'E Standard',      group:'Standard', midi:[40,45,50,55,59,64]},
-      {name:'E\u266D Standard', group:'Standard', midi:[39,44,49,54,58,63], flat:true},
-      {name:'D Standard',      group:'Standard', midi:[38,43,48,53,57,62]},
-      {name:'Drop D',          group:'Drop',     midi:[38,45,50,55,59,64]},
-      {name:'Drop C',          group:'Drop',     midi:[36,43,48,53,57,62]},
-      {name:'Open G',          group:'Open',     midi:[38,43,50,55,59,62]},
-      {name:'Open D',          group:'Open',     midi:[38,45,50,54,57,62]},
-      {name:'DADGAD',          group:'Open',     midi:[38,45,50,55,57,62]},
-      {name:'Open C',          group:'Open',     midi:[36,43,48,55,60,64]},
+      {name:'E Standard',       group:'Standard', midi:[40,45,50,55,59,64]},
+      {name:'E\u266D Standard',  group:'Standard', midi:[39,44,49,54,58,63], flat:true},
+      {name:'D Standard',       group:'Standard', midi:[38,43,48,53,57,62]},
+      {name:'C\u266F Standard',  group:'Standard', midi:[37,42,47,52,56,61]},
+      {name:'B Standard',       group:'Standard', midi:[35,40,45,50,54,59]},
+      {name:'Drop D',           group:'Drop',     midi:[38,45,50,55,59,64]},
+      {name:'Double Drop D',    group:'Drop',     midi:[38,45,50,55,59,62]},
+      {name:'Drop C',           group:'Drop',     midi:[36,43,48,53,57,62]},
+      {name:'Drop B',           group:'Drop',     midi:[35,42,47,52,56,61]},
+      {name:'Drop A',           group:'Drop',     midi:[33,40,45,50,54,59]},
+      {name:'Open G',           group:'Open',     midi:[38,43,50,55,59,62]},
+      {name:'Open D',           group:'Open',     midi:[38,45,50,54,57,62]},
+      {name:'Open E',           group:'Open',     midi:[40,47,52,56,59,64]},
+      {name:'Open A',           group:'Open',     midi:[40,45,52,57,61,64]},
+      {name:'Open C',           group:'Open',     midi:[36,43,48,55,60,64]},
+      {name:'Open Dm',          group:'Open',     midi:[38,45,50,53,57,62]},
+      {name:'DADGAD',           group:'Open',     midi:[38,45,50,55,57,62]},
+    ] },
+  { id:'guitar7', gauges:[7,6,5,4,3,2,1], fft:4096, step:1,
+    highpass:34, minHz:42, maxHz:450, lowpass:1800, freeMaxHz:1400, freeLowpass:2800,
+    tunings:[
+      {name:'B Standard',       group:'Standard', midi:[35,40,45,50,55,59,64]},
+      {name:'A Standard',       group:'Standard', midi:[33,38,43,48,53,57,62]},
+      {name:'Drop A',           group:'Drop',     midi:[33,40,45,50,55,59,64]},
+    ] },
+  { id:'bass5', gauges:[7,6,5,4,3], fft:16384, step:4,
+    highpass:16, minHz:22, maxHz:280, lowpass:1200, freeMaxHz:700, freeLowpass:1800,
+    tunings:[
+      {name:'B Standard',       group:'Standard', midi:[23,28,33,38,43]},
+      {name:'Drop A',           group:'Drop',     midi:[21,28,33,38,43]},
     ] },
   { id:'bass', gauges:[6,5,4,3], fft:16384, step:4,
     highpass:20, minHz:26, maxHz:280, lowpass:1200, freeMaxHz:700, freeLowpass:1800,
@@ -405,14 +512,37 @@ const INSTRUMENTS = [
       {name:'D6 \u00b7 ADF\u266FB',  group:'Standard', midi:[69,62,66,71]},
     ] },
 ];
-let instIndex = 0, tuningIndex = 0;
+let instIndex = 0, tuningIndex = 0;   // tuningIndex below zero means the custom one
+
+/* One editable tuning per instrument, seeded from its standard. It lives in the
+   address bar rather than in storage: nothing is written to the device, and a
+   tuning you invented can be bookmarked, or sent to someone else as a link. */
+const customTunings = {};
+const customFor = i => customTunings[i.id] || (customTunings[i.id] = i.tunings[0].midi.slice());
+
+function writeCustomToUrl(){
+  try {
+    history.replaceState(null, '', '#t=' + inst().id + '-' + customFor(inst()).join('-'));
+  } catch (e) {}
+}
+function readCustomFromUrl(){
+  const m = /^#t=([a-z0-9]+)-([\d-]+)$/.exec(location.hash || '');
+  if (!m) return;
+  const i = INSTRUMENTS.findIndex(x => x.id === m[1]);
+  if (i < 0) return;
+  const midi = m[2].split('-').map(Number);
+  if (midi.length !== INSTRUMENTS[i].gauges.length || midi.some(v => !(v >= 0 && v <= 127))) return;
+  instIndex = i; customTunings[m[1]] = midi; tuningIndex = -1;
+}
 /* which string you chose by hand, or null for automatic. Choosing one is the
    only way the tuner can know you mean the 6th when the guitar is still in
    standard and the target is four semitones below. */
 let pinned = null;
 const inst   = () => INSTRUMENTS[instIndex];
-const tuning = () => inst().tunings[tuningIndex];
-const flatSpelling = () => mode !== 'free' && !!tuning().flat;
+const tuning = () => tuningIndex < 0
+  ? { name:'custom', midi:customFor(inst()), custom:true }
+  : inst().tunings[tuningIndex];
+const flatSpelling = () => (mode === 'tuning' || mode === 'poly') && !!tuning().flat;
 
 /* The band the detector may look in. It widens when no tuning is targeted, and
    narrows hard around a string chosen by hand.
@@ -426,7 +556,9 @@ const flatSpelling = () => mode !== 'free' && !!tuning().flat;
    neighbouring strings. */
 function range(){
   const i = inst();
-  if (mode === 'free')
+  /* All-at-once measures the tuning's own notes, so it keeps the narrow band;
+     intonation reads any fretted note, so it needs the chromatic one. */
+  if (mode !== 'tuning' && mode !== 'poly')
     return { minHz:i.minHz, maxHz:i.freeMaxHz, lowpass:i.freeLowpass, reach:Infinity };
   const band = { minHz:i.minHz, maxHz:i.maxHz, lowpass:i.lowpass, reach:3.5 };
   if (pinned !== null){
@@ -455,6 +587,22 @@ const I18N = {
     hintGuitar:'Pluck a string and let it ring. Tap one below to tune that string alone.',
     hintPinned:'Tuning the {n} string only. Tap it again for automatic.',
     hintFree:'Play one note at a time. A chord has no single pitch to report.',
+    custom:'Custom',
+    customPick:'choose a string above',
+    customNote:'{n} \u2014 set its note',
+    poly:'All strings at once',
+    hintPoly:'Strum all the strings and let them ring. A quick check, not a precise one \u2014 tune the marked strings in the normal mode.',
+    polyStrum:'strum all the strings',
+    polyOf:'of {n} in tune',
+    intonation:'Intonation check',
+    hintIntonation:'Checks one string at a time. Tune it first, or the comparison means nothing.',
+    slotOpen:'Open string', slotFret:'12th fret',
+    introOpen:'Play the string open and let it ring.',
+    introFret:'Now fret the 12th and play it, with your usual pressure.',
+    intoOk:'the intonation is right.',
+    intoLengthen:'sharp at the 12th: move the saddle back to lengthen the string.',
+    intoShorten:'flat at the 12th: move the saddle forward to shorten the string.',
+    intoAgain:'Start over',
     micWait:'Waiting for microphone permission\u2026',
     micDenied:'The tuner needs microphone access. Allow it in your browser\u2019s site settings, then start listening again.',
     micNone:'No microphone available on this device.',
@@ -463,6 +611,7 @@ const I18N = {
     aMeter:'Pitch deviation shown as a flowing current', aLang:'Interface language',
     lblInstrument:'Instrument', lblTuning:'Tuning',
     instGuitar:'Guitar \u00b7 6 strings', instBass:'Bass \u00b7 4 strings',
+    instGuitar7:'Guitar \u00b7 7 strings', instBass5:'Bass \u00b7 5 strings',
     instMandolin:'Mandolin \u00b7 4 courses', instUkulele:'Ukulele \u00b7 4 strings',
     docTitle:'NepTuner \u2014 Tuner for guitar and other string instruments',
     pageTitle:'Tuner for guitar, bass, mandolin and ukulele',
@@ -498,6 +647,22 @@ const I18N = {
     hintGuitar:'Pulsa una cuerda y d\u00e9jala sonar. Toca una abajo para afinar solo esa.',
     hintPinned:'Afinando solo la cuerda {n}. T\u00f3cala otra vez para volver al autom\u00e1tico.',
     hintFree:'Toca una nota cada vez. Un acorde no tiene un tono \u00fanico.',
+    custom:'Personalizada',
+    customPick:'elige una cuerda arriba',
+    customNote:'{n} \u2014 fija su nota',
+    poly:'Todas las cuerdas a la vez',
+    hintPoly:'Rasguea todas las cuerdas y d\u00e9jalas sonar. Es una comprobaci\u00f3n r\u00e1pida, no precisa: afina las marcadas en el modo normal.',
+    polyStrum:'rasguea todas las cuerdas',
+    polyOf:'de {n} afinadas',
+    intonation:'Comprobar entonaci\u00f3n',
+    hintIntonation:'Comprueba una cuerda cada vez. Af\u00ednala primero, o la comparaci\u00f3n no significa nada.',
+    slotOpen:'Al aire', slotFret:'Traste 12',
+    introOpen:'Pulsa la cuerda al aire y d\u00e9jala sonar.',
+    introFret:'Ahora pisa el traste 12 y t\u00f3cala, con tu presi\u00f3n de siempre.',
+    intoOk:'la entonaci\u00f3n es correcta.',
+    intoLengthen:'alta en el traste 12: atrasa la selleta para alargar la cuerda.',
+    intoShorten:'baja en el traste 12: adelanta la selleta para acortar la cuerda.',
+    intoAgain:'Empezar de nuevo',
     micWait:'Esperando permiso del micr\u00f3fono\u2026',
     micDenied:'El afinador necesita acceso al micr\u00f3fono. Perm\u00edtelo en los ajustes del sitio de tu navegador y vuelve a empezar.',
     micNone:'No hay micr\u00f3fono disponible en este dispositivo.',
@@ -506,6 +671,7 @@ const I18N = {
     aMeter:'Desviaci\u00f3n del tono mostrada como una corriente de agua', aLang:'Idioma de la interfaz',
     lblInstrument:'Instrumento', lblTuning:'Afinaci\u00f3n',
     instGuitar:'Guitarra \u00b7 6 cuerdas', instBass:'Bajo \u00b7 4 cuerdas',
+    instGuitar7:'Guitarra \u00b7 7 cuerdas', instBass5:'Bajo \u00b7 5 cuerdas',
     instMandolin:'Mandolina \u00b7 4 \u00f3rdenes', instUkulele:'Ukelele \u00b7 4 cuerdas',
     docTitle:'NepTuner \u2014 Afinador de guitarra y otros instrumentos de cuerda',
     pageTitle:'Afinador de guitarra, bajo, mandolina y ukelele',
@@ -537,7 +703,7 @@ const I18N = {
 
 /* Shown at the foot of the page, and repeated as the CACHE name in sw.js so the
    two cannot drift apart: what the app says it is, is what is stored. */
-const VERSION = '0.17';
+const VERSION = '0.23';
 
 let lang = 'en';
 const t = key => (I18N[lang] && I18N[lang][key]) || I18N.en[key];
@@ -550,7 +716,7 @@ const midiToHz = m => a4 * Math.pow(2, (m - 69) / 12);
 function describe(freq){
   const exact = 69 + 12 * Math.log2(freq / a4);
   let midi, unsure = false;
-  if (mode !== 'free'){
+  if (mode === 'tuning'){
     if (pinned !== null){
       midi = tuning().midi[pinned];              // chosen by hand, however far away
     } else {
@@ -658,6 +824,91 @@ function detectPitch(buf, sampleRate, minHz, maxHz, mayGuess, step){
   return { hz: rate / period, clarity: 1 - norm[found] };
 }
 
+/* ---------------------------------------------------------- all at once */
+/* Strum everything and read all six strings from one sound.
+
+   This is a different problem from the one YIN solves, and an easier one than
+   it looks, because the six frequencies being looked for are already known. It
+   is not transcription; it is asking, of six named frequencies, whether energy
+   is there and exactly where. Each is measured twice over windows a fixed
+   distance apart: how far the phase advanced between them gives the frequency
+   far more finely than the window's own resolution.
+
+   What it cannot do is separate two sounds at the same frequency. A guitar is
+   tuned in fourths, so the third harmonic of the low E lands on the B string
+   and the fourth lands on the top E - within a fraction of a hertz when both
+   are near pitch. No window is long enough to pull those apart, so those two
+   strings read less reliably than the other four. Rather than hide that, the
+   estimate is taken twice with different spacings: when the two disagree the
+   window is thrown away, and a reading needs several surviving windows before
+   it is shown at all. */
+const POLY_N = 16384, POLY_H1 = 2048, POLY_H2 = 1024;
+const POLY_KEEP = 5, POLY_EVERY = 140, POLY_DISAGREE = 3, POLY_QUIET = 0.20;
+let polyWindow = null, polyHistory = [], polyResult = [], polyLast = -1e9;
+
+function polyBin(buf, off, f, rate){
+  if (!polyWindow || polyWindow.length !== POLY_N){
+    polyWindow = new Float32Array(POLY_N);
+    for (let i = 0; i < POLY_N; i++){
+      const t = 2 * Math.PI * i / (POLY_N - 1);
+      polyWindow[i] = 0.35875 - 0.48829 * Math.cos(t)
+                    + 0.14128 * Math.cos(2 * t) - 0.01168 * Math.cos(3 * t);
+    }
+  }
+  const w = 2 * Math.PI * f / rate;
+  let re = 0, im = 0;
+  for (let i = 0; i < POLY_N; i++){
+    const v = buf[i + off] * polyWindow[i];
+    re += v * Math.cos(w * i); im -= v * Math.sin(w * i);
+  }
+  return [re / POLY_N, im / POLY_N];
+}
+
+/* cents away from f, from how much the phase moved across `hop` samples */
+function polyPhase(buf, f, hop, rate){
+  const [r1, i1] = polyBin(buf, 0, f, rate);
+  const [r2, i2] = polyBin(buf, hop, f, rate);
+  let d = Math.atan2(i2, r2) - Math.atan2(i1, r1) - 2 * Math.PI * f * hop / rate;
+  while (d >  Math.PI) d -= 2 * Math.PI;
+  while (d < -Math.PI) d += 2 * Math.PI;
+  const hz = f + d * rate / (2 * Math.PI * hop);
+  return { cents: 1200 * Math.log2(hz / f), mag: Math.hypot(r1, i1) };
+}
+
+function measurePoly(buf, rate){
+  const targets = tuning().midi;
+  if (polyHistory.length !== targets.length) polyHistory = targets.map(() => []);
+  targets.forEach((m, i) => {
+    const f = a4 * Math.pow(2, (m - 69) / 12);
+    const a = polyPhase(buf, f, POLY_H1, rate);
+    const b = polyPhase(buf, f, POLY_H2, rate);
+    const h = polyHistory[i];
+    /* the two spacings must agree, and the answer must be in a range a string
+       could plausibly be in, or this window says nothing */
+    if (Math.abs(a.cents - b.cents) < POLY_DISAGREE && Math.abs(a.cents) < 60){
+      h.push({ cents:a.cents, mag:a.mag });
+      if (h.length > POLY_KEEP) h.shift();
+    }
+  });
+  const mid = arr => [...arr].sort((x, y) => x - y)[arr.length >> 1];
+  polyResult = polyHistory.map(h => h.length >= 2
+    ? { cents:mid(h.map(v => v.cents)), mag:mid(h.map(v => v.mag)), sure:h.length >= 3 }
+    : { cents:null, mag:0, sure:false });
+
+  /* A string that was not struck still returns a number, built out of noise and
+     whatever leaks in from its neighbours. Measured against a strum's own median
+     level, a played string never falls below about a third of it and a silent one
+     never rises above a sixth, so the two are cleanly separable. Dropping a quiet
+     real string costs a blank mark; keeping an invented one costs a wrong answer. */
+  const level = polyResult.filter(r => r.cents !== null).map(r => r.mag);
+  if (level.length){
+    const floor = mid(level) * POLY_QUIET;
+    polyResult.forEach(r => { if (r.mag < floor){ r.cents = null; r.sure = false; } });
+  }
+}
+
+function resetPoly(){ polyHistory = []; polyResult = []; polyLast = -1e9; }
+
 /* ------------------------------------------------------------------ audio */
 let ctx = null, analyser = null, rumble = null, shimmer = null;
 let samples = null, stream = null, frame = null;
@@ -672,8 +923,10 @@ function applyAudioRange(){
      ringing an octave or a twelfth below is attenuated before it is measured */
   rumble.frequency.value = Math.max(inst().highpass, band.minHz * 0.85);
   shimmer.frequency.value = band.lowpass;
-  if (analyser.fftSize !== inst().fft){
-    analyser.fftSize = inst().fft;
+  /* the phase method needs two long windows a fixed distance apart */
+  const want = mode === 'poly' ? 32768 : inst().fft;
+  if (analyser.fftSize !== want){
+    analyser.fftSize = want;
     samples = new Float32Array(analyser.fftSize);
   }
 }
@@ -780,6 +1033,15 @@ function loop(time){
 
   /* the search costs more than a frame is worth doing sixty times a second, and
      a string does not change pitch in thirty milliseconds */
+  if (mode === 'poly'){
+    if (rms > openAt && time - polyLast >= POLY_EVERY){
+      polyLast = time;
+      measurePoly(samples, ctx.sampleRate);
+    }
+    paint(time);
+    return;
+  }
+
   const band = range();
   if (rms > (tracking ? holdAt : openAt) && time - lastLook >= 30){
     lastLook = time;
@@ -790,6 +1052,7 @@ function loop(time){
       accept(found.hz, time);
     }
   }
+  if (mode === 'intonation' && lastHz) watchIntonation(lastHz, time);
   if (lastHz && time - lastSeen > HOLD_MS){
     lastHz = null; tracking = false;
     history.length = 0; suspect.length = 0;
@@ -839,6 +1102,83 @@ function rampAt(stops, near){
 const rgba = (hex, a) =>
   'rgba(' + [1, 3, 5].map(i => parseInt(hex.substr(i, 2), 16)).join(',') + ',' + a + ')';
 
+/* Six marks on one line. Nothing to interpret: when every string is right they
+   sit in a straight row, and any that is out stands away from it. Same centre
+   line, same colour ramp and same meaning of up and down as the single-string
+   meter, so nothing has to be learned twice. A hollow mark is a reading the
+   estimator is not confident in - which happens on the B and top E, where the
+   low strings' harmonics fall exactly on their pitch. */
+function paintPoly(time){
+  const cs = getComputedStyle(document.body);
+  const line  = cs.getPropertyValue('--line').trim();
+  const muted = cs.getPropertyValue('--muted').trim();
+  const stops = ['--ramp-0','--ramp-1','--ramp-2','--ramp-3','--ramp-4']
+    .map(v => cs.getPropertyValue(v).trim());
+
+  c2d.clearRect(0, 0, W, H);
+  c2d.globalAlpha = 1;
+  const mid = H / 2, span = H / 2 - 22;
+
+  for (const [pos, dash] of [[0, []], [-25, [2, 5]], [25, [2, 5]]]){
+    const y = mid - (pos / 50) * span;
+    c2d.strokeStyle = pos === 0 ? muted : line;
+    c2d.setLineDash(dash); c2d.lineWidth = 1;
+    c2d.beginPath(); c2d.moveTo(0, y + .5); c2d.lineTo(W, y + .5); c2d.stroke();
+  }
+  c2d.setLineDash([]);
+
+  const midi = tuning().midi, lanes = midi.length, lw = W / lanes;
+  const names = noteNames();
+  let inTune = 0, read = 0;
+
+  midi.forEach((m, i) => {
+    const cx = lw * (i + 0.5), half = Math.min(lw * 0.32, 22);
+    const r = polyResult[i];
+    c2d.font = '500 10px ui-monospace, SFMono-Regular, Menlo, monospace';
+    c2d.textAlign = 'center';
+
+    if (!r || r.cents === null){
+      c2d.fillStyle = muted; c2d.globalAlpha = .45;
+      c2d.beginPath(); c2d.arc(cx, mid, 2, 0, Math.PI * 2); c2d.fill();
+      c2d.globalAlpha = 1;
+    } else {
+      read++;
+      const c = Math.max(-50, Math.min(50, r.cents));
+      const y = mid - (c / 50) * span;
+      const tone = rampAt(stops, 1 - Math.min(Math.abs(c) / 50, 1));
+      if (Math.abs(r.cents) <= 5) inTune++;
+      c2d.strokeStyle = tone; c2d.lineCap = 'round';
+      c2d.lineWidth = r.sure ? 5 : 2;
+      c2d.setLineDash(r.sure ? [] : [3, 4]);
+      c2d.beginPath(); c2d.moveTo(cx - half, y); c2d.lineTo(cx + half, y); c2d.stroke();
+      c2d.setLineDash([]);
+      /* which way it has to go, only while it is worth saying */
+      if (Math.abs(c) > 5){
+        const up = c < 0, ty = up ? y - 9 : y + 9;
+        c2d.globalAlpha = .8; c2d.lineWidth = 1.6;
+        c2d.beginPath();
+        c2d.moveTo(cx - 4, up ? ty + 4 : ty - 4);
+        c2d.lineTo(cx, ty); c2d.lineTo(cx + 4, up ? ty + 4 : ty - 4);
+        c2d.stroke(); c2d.globalAlpha = 1;
+      }
+    }
+    c2d.fillStyle = muted;
+    c2d.fillText(names[((m % 12) + 12) % 12], cx, H - 3);
+  });
+
+  const readout = document.getElementById('readout');
+  readout.classList.toggle('dim', read === 0);
+  readout.classList.toggle('locked', read > 0 && inTune === lanes);
+  document.getElementById('panel').classList.toggle('locked', read > 0 && inTune === lanes);
+  document.getElementById('note').textContent   = read ? String(inTune) : '\u2014';
+  document.getElementById('octave').textContent = '';
+  document.getElementById('alt').textContent    = '';
+  document.getElementById('hz').textContent     = '';
+  document.getElementById('offset').textContent =
+    read ? t('polyOf').replace('{n}', lanes) : t('polyStrum');
+  renderCustom(); renderIntonation();
+}
+
 function paint(time){
   /* every colour comes from the stylesheet, so the canvas follows the theme */
   const cs = getComputedStyle(document.body);
@@ -847,6 +1187,7 @@ function paint(time){
   const stops = ['--ramp-0', '--ramp-1', '--ramp-2', '--ramp-3', '--ramp-4']
     .map(v => cs.getPropertyValue(v).trim());
 
+  if (mode === 'poly'){ paintPoly(time); return; }
   const reading = lastHz ? describe(lastHz) : null;
   const usable  = reading && !reading.far;
   const close   = usable && Math.abs(reading.cents) <= SETTLE_CENTS;
@@ -968,6 +1309,8 @@ function paint(time){
   }
 
   /* readout */
+  renderCustom();
+  renderIntonation();
   document.getElementById('panel').classList.toggle('locked', !!locked);
   const readout = document.getElementById('readout');
   readout.classList.toggle('dim', !usable);
@@ -981,6 +1324,11 @@ function paint(time){
   document.getElementById('offset').textContent =
       reading && reading.far ? t(reading.unsure ? 'pickString' : 'noString')
     : !usable                ? ''
+    /* Setting intonation needs the number itself, to a tenth, and needs it at
+       every moment - announcing "in tune" at three cents is exactly the
+       resolution this job cannot afford. */
+    : mode === 'intonation'  ? (reading.cents >= 0 ? '+' : '\u2212') +
+                               Math.abs(reading.cents).toFixed(1) + ' cents'
     : locked                 ? t('inTune')
     : close                  ? t('settling')        // right, but not yet steady
     : t(reading.cents > 0 ? 'loosen' : 'tighten')   // the action, not the diagnosis
@@ -1019,6 +1367,100 @@ async function keepAwake(on){
 document.addEventListener('visibilitychange', () => {
   if (document.visibilityState === 'visible' && go.dataset.on === 'true') keepAwake(true);
 });
+
+/* ----------------------------------------------------------- custom tuning */
+/* Moves the chosen string a semitone at a time, within whatever the instrument's
+   own band can actually detect - there is no use offering a target the detector
+   could never see. */
+function stepCustom(delta){
+  if (pinned === null || tuningIndex >= 0) return;
+  const i = inst(), arr = customFor(i);
+  const lo = Math.ceil(69 + 12 * Math.log2(i.minHz / a4) + 3.5);
+  const hi = Math.floor(69 + 12 * Math.log2(i.maxHz / a4) - 3.5);
+  const next = arr[pinned] + delta;
+  if (next < lo || next > hi) return;
+  arr[pinned] = next;
+  writeCustomToUrl();
+  history.length = 0; lastHz = null; suspect.length = 0; tracking = false; wake.length = 0;
+  applyAudioRange();
+  applyNaming();
+  pluck(next);                      // hear where it now sits
+  paint(performance.now());
+}
+
+function renderCustom(){
+  const box = document.getElementById('custom');
+  box.hidden = !(mode === 'tuning' && tuningIndex < 0);
+  if (box.hidden) return;
+  const chosen = pinned !== null;
+  document.getElementById('custom-down').disabled = !chosen;
+  document.getElementById('custom-up').disabled   = !chosen;
+  document.getElementById('custom-note').textContent = chosen
+    ? t('customNote').replace('{n}', strings.children[pinned].dataset.label)
+    : t('customPick');
+}
+
+/* ------------------------------------------------------------- intonation */
+/* Two readings, taken automatically. Play the string open; when the pitch has
+   held still for a moment it is captured. Fret the twelfth and play again; that
+   is captured too. The fretted note should land exactly an octave above the
+   open one, and how far it misses is the intonation error.
+
+   Sharp means the string is sounding shorter than it should, so the saddle has
+   to move back and lengthen it. Flat means the opposite. Naming the action
+   rather than the symptom matters even more here than when tuning: "sharp at
+   the twelfth" is a fact a beginner cannot act on. */
+const STEADY_CENTS = 2, STEADY_MS = 400, INTONATION_OK = 2;
+let openHz = null, fretHz = null;
+let steadyRef = null, steadyRefAt = null;
+
+function resetIntonation(){
+  openHz = fretHz = null; steadyRef = null; steadyRefAt = null;
+}
+
+/* Watches for the pitch to stop moving, which is what makes the capture
+   automatic instead of another button to press with both hands on the guitar. */
+function watchIntonation(hz, time){
+  if (steadyRef === null || Math.abs(1200 * Math.log2(hz / steadyRef)) > STEADY_CENTS){
+    steadyRef = hz; steadyRefAt = time; return;
+  }
+  if (time - steadyRefAt < STEADY_MS) return;
+  if (openHz === null){ openHz = steadyRef; return; }
+  /* the second reading has to be a different note, or one long ring would fill
+     both slots with the same pitch */
+  if (fretHz === null && Math.abs(1200 * Math.log2(steadyRef / openHz)) > 600) fretHz = steadyRef;
+}
+
+function renderIntonation(){
+  const box = document.getElementById('intonation');
+  box.hidden = mode !== 'intonation';
+  if (box.hidden) return;
+  const name = hz => {
+    const m = Math.round(69 + 12 * Math.log2(hz / a4));
+    return noteNames()[((m % 12) + 12) % 12] + (Math.floor(m / 12) - 1);
+  };
+  for (const [id, hz, key] of [['slot-open', openHz, 'slotOpen'],
+                               ['slot-fret', fretHz, 'slotFret']]){
+    const el = document.getElementById(id);
+    el.querySelector('span').textContent = t(key);
+    el.querySelector('b').textContent = hz ? name(hz) + '  ' + hz.toFixed(1) + ' Hz' : '\u2014';
+    el.classList.toggle('done', !!hz);
+    el.classList.toggle('waiting', !hz && (id === 'slot-open' || !!openHz));
+  }
+  const out = document.getElementById('verdict');
+  if (!openHz)      out.textContent = t('introOpen');
+  else if (!fretHz) out.textContent = t('introFret');
+  else {
+    const off = 1200 * Math.log2(fretHz / (openHz * 2));
+    const shown = (off >= 0 ? '+' : '\u2212') + Math.abs(off).toFixed(1) + ' cents';
+    out.textContent = '';
+    out.append(Object.assign(document.createElement('strong'), {textContent: shown}),
+               '  \u00b7  ',
+               Math.abs(off) <= INTONATION_OK ? t('intoOk')
+                 : off > 0 ? t('intoLengthen') : t('intoShorten'));
+  }
+  document.getElementById('again').textContent = t('intoAgain');
+}
 
 /* ---------------------------------------------------------- reference tone */
 async function pluck(midi){
@@ -1078,6 +1520,14 @@ function renderTunings(){
   select.textContent = '';
   select.appendChild(Object.assign(document.createElement('option'),
     {value:'free', textContent:t('free')}));      // first, above every group
+  select.appendChild(Object.assign(document.createElement('option'),
+    {value:'intonation', textContent:t('intonation')}));
+  select.appendChild(Object.assign(document.createElement('option'),
+    {value:'poly', textContent:t('poly')}));
+  const set = naming === 'latin' ? LATIN : LETTERS;
+  select.appendChild(Object.assign(document.createElement('option'),
+    {value:'custom', textContent:t('custom') + '  \u00b7  ' +
+      customFor(inst()).map(m => set[((m % 12) + 12) % 12]).join(' ')}));
   let group = null, holder = null;
   inst().tunings.forEach((tn, i) => {
     if (tn.group !== group){
@@ -1093,7 +1543,7 @@ function renderTunings(){
       tn.midi.map(m => set[((m % 12) + 12) % 12]).join(' ');
     holder.appendChild(opt);
   });
-  select.value = mode === 'free' ? 'free' : String(tuningIndex);
+  select.value = mode !== 'tuning' ? mode : (tuningIndex < 0 ? 'custom' : String(tuningIndex));
 }
 
 /* The instrument list. Its visible label sits beside it, so it needs no aria. */
@@ -1132,6 +1582,7 @@ function applyNaming(){
   });
   renderTunings();
   renderInstruments();
+  renderCustom();
   const refNote = names[9] + '4' + (naming === 'latin' ? ' (A4)' : '');
   document.getElementById('ref-label').textContent = refNote;
   document.getElementById('ref').setAttribute('aria-label', t('aRef').replace('{n}', names[9]));
@@ -1165,24 +1616,28 @@ function applyLanguage(){
   go.textContent = go.dataset.on === 'true' ? t('stop') : t('start');
   naming = (I18N[lang] && I18N[lang].notation) || 'letters';
   applyNaming();
-  say(mode !== 'free' ? t('hintGuitar') : t('hintFree'));
+  say(t(mode === 'tuning' ? 'hintGuitar' : mode === 'free' ? 'hintFree'
+        : mode === 'poly' ? 'hintPoly' : 'hintIntonation'));
   paint(performance.now());
 }
 
 /* The picker is the only mode control there is: 'free' or a tuning index.
    One list, one decision - what am I tuning to. */
 function selectTarget(value){
-  const free = value === 'free';
-  if (!free) tuningIndex = Number(value) || 0;
+  const special = value === 'free' || value === 'intonation' || value === 'poly';
+  if (!special) tuningIndex = value === 'custom' ? -1 : (Number(value) || 0);
   pinned = null;                         // a chosen string means nothing in a new tuning
-  mode = free ? 'free' : 'tuning';
+  mode = special ? value : 'tuning';
   shell.dataset.mode = mode;
-  strings.hidden = free;                 // the six strings mean nothing in free mode
+  strings.hidden = mode !== 'tuning';    // the strings mean nothing without a tuning
   applyAudioRange();
   history.length = 0; lastHz = null; suspect.length = 0; tracking = false;   // never judge a new target
   wake.length = 0;                       // and never trail a wake from another string
+  resetIntonation(); resetPoly();
   applyNaming();
-  if (hint.dataset.tone !== 'warn') say(free ? t('hintFree') : t('hintGuitar'));
+  if (hint.dataset.tone !== 'warn')
+    say(t(mode === 'tuning' ? 'hintGuitar' : mode === 'free' ? 'hintFree'
+        : mode === 'poly' ? 'hintPoly' : 'hintIntonation'));
   paint(performance.now());
 }
 
@@ -1226,6 +1681,13 @@ document.getElementById('instrument').addEventListener('change', e => {
   paint(performance.now());
 });
 
+document.getElementById('custom-down').addEventListener('click', () => stepCustom(-1));
+document.getElementById('custom-up').addEventListener('click',   () => stepCustom(1));
+
+document.getElementById('again').addEventListener('click', () => {
+  resetIntonation(); renderIntonation();
+});
+
 document.getElementById('update').addEventListener('click', checkForUpdate);
 document.getElementById('tuning').addEventListener('change', e => selectTarget(e.target.value));
 
@@ -1237,7 +1699,8 @@ document.getElementById('lang').addEventListener('change', e => {
 go.addEventListener('click', async () => {
   if (go.dataset.on === 'true'){
     stop(); keepAwake(false);
-    go.dataset.on = 'false'; go.textContent = t('start');
+    go.dataset.on = 'false'; shell.dataset.listening = 'false';
+    go.textContent = t('start');
     say(t('stopped'));
     paint(performance.now());
     return;
@@ -1245,9 +1708,11 @@ go.addEventListener('click', async () => {
   try {
     go.disabled = true; say(t('micWait'));
     await listen();
-    go.dataset.on = 'true'; go.textContent = t('stop');
+    go.dataset.on = 'true'; shell.dataset.listening = 'true';
+    go.textContent = t('stop');
     keepAwake(true);
-    say(mode !== 'free' ? t('hintGuitar') : t('hintFree'));
+    say(t(mode === 'tuning' ? 'hintGuitar' : mode === 'free' ? 'hintFree'
+        : mode === 'poly' ? 'hintPoly' : 'hintIntonation'));
   } catch (err){
     say(err && err.name === 'NotAllowedError' ? t('micDenied') : t('micNone'), 'warn');
   } finally { go.disabled = false; }
@@ -1280,6 +1745,7 @@ async function checkForUpdate(){
   }
 }
 
+readCustomFromUrl();          // a link may carry an instrument and a tuning
 buildStrings();
 document.getElementById('version').textContent = 'v' + VERSION;
 
@@ -1289,7 +1755,7 @@ if (I18N[guess]) lang = guess;
 /* Galician, Catalan and Basque are no longer translated, and Spanish is a far
    better guess for those readers than English */
 else if (['gl', 'ca', 'eu'].includes(guess)) lang = 'es';
-strings.hidden = mode === 'free';
+strings.hidden = mode !== 'tuning';
 applyLanguage();
 syncBar();
 </script>
