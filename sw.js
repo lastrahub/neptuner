@@ -7,9 +7,9 @@
    To publish a change, raise the version in CACHE, and in VERSION inside index.html. A device picks it up the next
    time the browser checks this file, or immediately if the reader presses the
    update button inside the app. */
-const CACHE = 'neptuner-0.25';   // same string the app shows at its foot
+const CACHE = 'neptuner-0.27';   // same string the app shows at its foot
 const FILES = [
-  './', './index.html', './manifest.webmanifest',
+  './', './index.html', './pitch-engine.js', './manifest.webmanifest',
   './icon.svg', './icon.png', './icon-192.png',
   './icon-maskable-512.png', './apple-touch-icon.png'
 ];

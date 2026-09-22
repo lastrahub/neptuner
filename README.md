@@ -36,10 +36,11 @@ its own speaker for the instrument.
 ### Chromatic
 
 Reports the nearest of the twelve notes in any octave. The main readout names
-the detected note and octave, while a compact scale shows the semitone below,
-the detected note and the semitone above — including octave changes such as
-**B3 · C4 · C♯4**. Frequency in hertz and the distance in cents remain visible.
-Play one note at a time: a chord has no single pitch to report.
+the detected note and octave, while a fixed twelve-note strip shows its position
+across the complete chromatic scale. A six-cent boundary hysteresis prevents the
+name flickering between adjacent semitones when a reading sits exactly halfway.
+Frequency in hertz and the distance in cents remain visible. Play one note at a
+time: a chord has no single pitch to report.
 
 ### Intonation check
 
@@ -83,33 +84,17 @@ the top E, within a fraction of a hertz when both are near pitch. Nothing can
 separate two sounds at the same frequency, so those two strings sometimes read
 badly or not at all. That is admitted rather than hidden.
 
-#### Checking whether it actually works
+#### Validation boundary
 
-The repository includes deterministic synthetic regression tests for the pitch
-detector and the direction reported by the polyphonic estimator. They test the
-code against a signal model rather than against a real instrument, so they guard
-against software regressions but are not a real-world accuracy claim.
+The release is checked with the same detector file that the browser loads. The
+internal QA suite combines exact digital references, difficult synthetic
+signals, isolated recorded notes and string-level GuitarSet excerpts. Test
+audio, download tools and generated reports are kept out of the app package.
 
-**The app carries its own reference instrument, so a real test costs nothing.**
-Use the single-string mode as the practical reference after checking it against
-a trusted tuner on the phone and instrument being tested.
-
-1. Tune all six strings in the normal mode until each locks.
-2. Switch to **All strings at once** and strum. Every mark should sit on the
-   line and the count should read the full number of strings.
-3. Pick one string. In the normal mode, detune it deliberately to about +20
-   cents — the readout tells you exactly where you are.
-4. Strum again. That one string should stand above the line; the others should
-   not have moved.
-5. Put it back, then repeat flat, and repeat for each string.
-
-Twelve trials, about fifteen minutes. Write down whether the right string was
-flagged, whether the direction was right, and whether any other mark moved when
-it should not have. That is a real accuracy figure on a real instrument, and it
-will be worth more than everything above.
-
-Expect the B and top E to be the weak ones. If they are, the model was right. If
-something else fails, the model was wrong and this needs revisiting.
+Those checks can catch software errors, including wrong octaves and harmonic
+confusion, without asking a user to record an instrument. They still cannot
+measure a particular phone's sample clock, microphone processing, room or
+placement, so NepTuner does not claim a universal real-world accuracy figure.
 
 ### Custom tuning
 
@@ -234,10 +219,10 @@ them.
 copy of itself at every lag, squares the difference, and looks for the lag where
 that collapses. A cumulative-mean normalisation makes the first dip the true
 period rather than a harmonic. Parabolic interpolation between lags gives
-sub-sample resolution. In the included deterministic synthetic checks, errors
-remain below half a cent across the supported target ranges at 44.1 and 48 kHz.
-Real strings, microphones and rooms dominate the uncertainty, so this is a
-software regression bound rather than a promise of real-world accuracy.
+sub-sample resolution. A conservative doubled-period check rejects an apparent
+octave when the true fundamental produces a dramatically cleaner dip. Exact
+digital references guard the arithmetic; real strings, microphones and rooms
+still dominate the end-to-end uncertainty.
 
 What surrounds the algorithm matters more than the algorithm:
 
@@ -266,21 +251,11 @@ What surrounds the algorithm matters more than the algorithm:
 
 ## Validation
 
-Run the deterministic checks with:
-
-```sh
-node tests/run.mjs
-```
-
-They verify version/cache consistency, the 33 preset tunings, install-icon
-dimensions, custom-link safeguards, single-note pitch error at 44.1 and 48 kHz,
-and polyphonic direction on synthetic strums. `VALIDATION.md` records the current
-automated result and the limits of what it establishes.
-
-Real-device validation is still required before publishing a population-wide
-accuracy percentage. `tests/real-device-template.csv` provides a consistent log
-for phones, instruments, strings, flat/sharp trials, missed strings and false
-positives.
+The production archive contains only the files required by the offline web app.
+The reproducible harness, pinned source manifest, hashes, cached-download logic
+and generated measurements live in a separate internal QA package. This keeps
+benchmark conclusions out of runtime code and prevents third-party audio from
+being redistributed with NepTuner.
 
 ---
 
@@ -288,7 +263,8 @@ positives.
 
 | File | Purpose |
 | --- | --- |
-| `index.html` | the whole app: markup, styles, audio, detection, drawing |
+| `index.html` | app markup, styles, audio flow and drawing |
+| `pitch-engine.js` | shared monophonic pitch detector used by the app |
 | `sw.js` | keeps the files on the device so the tuner runs offline |
 | `manifest.webmanifest` | name, colours, icon and orientation for install |
 | `icon.svg` | clean vector master for the app icon |
@@ -296,9 +272,6 @@ positives.
 | `icon-maskable-512.png` | safe-zone-aware adaptive icon |
 | `apple-touch-icon.png` | 180×180 iOS home-screen icon |
 | `share.png` | 1200×630 card shown when the link is shared |
-| `tests/run.mjs` | deterministic regression checks |
-| `tests/real-device-template.csv` | real-instrument validation log |
-| `VALIDATION.md` | current evidence and explicit limitations |
 | `.nojekyll` | tells GitHub Pages to serve the files untouched |
 
 Serving requires HTTPS or `localhost`: browsers only grant microphone access in
@@ -308,7 +281,8 @@ a secure context.
 
 ## Publishing a change
 
-Run `node tests/run.mjs`, then raise the version in **two** places so they match:
+Run the separate internal QA package, then raise the version in **two** places
+so they match:
 
 - `VERSION` in `index.html` — the number shown at the foot of the app
 - `CACHE` in `sw.js` — the name of the stored copy

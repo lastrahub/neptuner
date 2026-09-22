@@ -8,7 +8,7 @@
      beacon. If anyone ever pastes in a tracker, the browser refuses it. -->
 <meta http-equiv="Content-Security-Policy" content="
   default-src 'none';
-  script-src 'unsafe-inline';
+  script-src 'self' 'unsafe-inline';
   style-src 'unsafe-inline';
   img-src 'self';
   manifest-src 'self';
@@ -205,28 +205,34 @@
   .readout.locked .pitch b{color:var(--green)}
   .panel.locked{border-color:var(--green); background-color:var(--wash)}
 
-  /* Chromatic mode alone gets a small slice of the scale. The detected note
-     stays centred, with one semitone on either side, so its octave and place
-     in the chromatic sequence are visible without crowding the guided tuner. */
+  /* Chromatic mode alone gets the complete pitch-class map. Its fixed C-to-B
+     order makes position instantly readable; the large note above carries the
+     octave, while the meter carries the sub-semitone position. */
   .chromatic-scale{
-    position:relative; display:grid; grid-template-columns:repeat(3, 1fr);
+    position:relative; display:grid; grid-template-columns:repeat(12, minmax(0, 1fr));
     padding-top:14px; margin:-2px 0 1px;
-    color:var(--muted); font-family:var(--mono); font-size:11.5px;
+    color:var(--muted); font-family:var(--mono); font-size:9px;
   }
   .chromatic-scale::before{
-    content:""; position:absolute; top:4px; left:16.667%; right:16.667%;
+    content:""; position:absolute; top:4px; left:4.167%; right:4.167%;
     height:1px; background:var(--line);
   }
-  .chromatic-scale span{position:relative; text-align:center; white-space:nowrap}
+  .chromatic-scale span{position:relative; min-width:0; text-align:center; white-space:nowrap}
   .chromatic-scale span::before{
     content:""; position:absolute; left:50%; top:-12.5px; width:3px; height:3px;
     border-radius:50%; background:var(--muted); transform:translateX(-50%);
   }
-  .chromatic-scale .current{color:var(--text); font-size:13px; font-weight:600}
+  .chromatic-scale .current{color:var(--text); font-size:10.5px; font-weight:600}
   .chromatic-scale .current::before{
     top:-14.5px; width:7px; height:7px; background:currentColor;
   }
   .panel.locked .chromatic-scale .current{color:var(--green)}
+  .shell[data-naming="latin"] .chromatic-scale{font-size:8px}
+  @media (max-width:360px){
+    .chromatic-scale{font-size:8px}
+    .chromatic-scale .current{font-size:9.5px}
+    .shell[data-naming="latin"] .chromatic-scale{font-size:7.25px}
+  }
 
   .meter{display:flex; gap:12px; align-items:stretch}
   canvas{flex:1; width:100%; height:148px; display:block; touch-action:none}
@@ -438,7 +444,8 @@
       </div>
     </div>
     <div class="chromatic-scale" id="chromatic-scale" aria-hidden="true" hidden>
-      <span>&mdash;</span><span class="current">&mdash;</span><span>&mdash;</span>
+      <span></span><span></span><span></span><span></span><span></span><span></span>
+      <span></span><span></span><span></span><span></span><span></span><span></span>
     </div>
     <div class="meter">
       <canvas id="wave"></canvas>
@@ -485,6 +492,7 @@
 
 </main>
 
+<script src="pitch-engine.js"></script>
 <script>
 /* ---------------------------------------------------------------- naming */
 const LETTERS = ['C','C\u266F','D','D\u266F','E','F','F\u266F','G','G\u266F','A','A\u266F','B'];
@@ -662,7 +670,7 @@ const I18N = {
     start:'Start listening', stop:'Stop listening',
     hintGuitar:'Pluck a string and let it ring. Tap one below to tune that string alone.',
     hintPinned:'Tuning the {n} string only. Tap it again for automatic.',
-    hintFree:'Play one note at a time, not a chord. The octave and neighbouring semitones appear above the meter.',
+    hintFree:'Play one note at a time, not a chord. The octave and full chromatic scale appear above the meter.',
     custom:'Custom',
     customPick:'choose a string above',
     customNote:'{n} \u2014 set its note',
@@ -725,7 +733,7 @@ const I18N = {
     start:'Empezar a escuchar', stop:'Dejar de escuchar',
     hintGuitar:'Pulsa una cuerda y d\u00e9jala sonar. Toca una abajo para afinar solo esa.',
     hintPinned:'Afinando solo la cuerda {n}. T\u00f3cala otra vez para volver al autom\u00e1tico.',
-    hintFree:'Toca una nota cada vez, no un acorde. La octava y los semitonos contiguos aparecen sobre el medidor.',
+    hintFree:'Toca una nota cada vez, no un acorde. La octava y la escala crom\u00e1tica completa aparecen sobre el medidor.',
     custom:'Personalizada',
     customPick:'elige una cuerda arriba',
     customNote:'{n} \u2014 fija su nota',
@@ -785,7 +793,7 @@ const I18N = {
 
 /* Shown at the foot of the page, and repeated as the CACHE name in sw.js so the
    two cannot drift apart: what the app says it is, is what is stored. */
-const VERSION = '0.25';
+const VERSION = '0.27';
 
 let lang = 'en';
 const t = key => (I18N[lang] && I18N[lang][key]) || I18N.en[key];
@@ -793,6 +801,8 @@ const t = key => (I18N[lang] && I18N[lang][key]) || I18N.en[key];
 /* ------------------------------------------------------------------ music */
 let mode = 'tuning';
 let a4 = 440;
+let chromaticMidi = null;
+const CHROMATIC_SWITCH = .56;   // six cents of hysteresis around a semitone boundary
 const midiToHz = m => a4 * Math.pow(2, (m - 69) / 12);
 const SETTINGS_KEY = 'neptuner-settings-v1';
 
@@ -862,7 +872,12 @@ function describe(freq){
       unsure = near.length > 1 && near[0].d > 2 && (near[1].d - near[0].d) < 2;
     }
   } else {
-    midi = Math.round(exact);
+    const nearest = Math.round(exact);
+    if (mode === 'free'){
+      if (chromaticMidi === null || Math.abs(exact - chromaticMidi) >= CHROMATIC_SWITCH)
+        chromaticMidi = nearest;
+      midi = chromaticMidi;
+    } else midi = nearest;
   }
   const pc = ((midi % 12) + 12) % 12;
   const letters = flatSpelling() ? LETTERS_FLAT : LETTERS;
@@ -877,101 +892,23 @@ function describe(freq){
   };
 }
 
-/* The scale strip belongs only to the chromatic mode. It deliberately shows
-   three notes rather than all twelve: the current octave boundary remains
-   explicit (B3 C4 C\u266f4), while the meter below already carries the precise
-   position inside the selected semitone. */
+/* The full scale strip belongs only to chromatic mode. Note and octave remain
+   large above it; this fixed map shows where that pitch class sits among all
+   twelve without changing the guided tuner's interface. */
 function renderChromaticScale(reading, usable){
   const scale = document.getElementById('chromatic-scale');
   scale.hidden = mode !== 'free';
   if (mode !== 'free') return;
   const cells = scale.children;
+  const names = noteNames();
   for (let i = 0; i < cells.length; i++){
-    if (!usable){
-      cells[i].textContent = '\u2014';
-      continue;
-    }
-    const midi = reading.midi + i - 1;
-    const pc = ((midi % 12) + 12) % 12;
-    cells[i].textContent = noteNames()[pc] + (Math.floor(midi / 12) - 1);
+    cells[i].textContent = names[i];
+    cells[i].classList.toggle('current', !!usable && reading.pc === i);
   }
 }
 
-/* -------------------------------------------------------------- detection */
-/* YIN (de Cheveigne & Kawahara 2002): squared difference over lag, then a
-   cumulative-mean normalisation so the first dip below a threshold is the
-   true period rather than a harmonic. Lags are restricted to the mode's
-   frequency window so the inner loop fits in an animation frame. */
-const THRESHOLD = 0.12;   // a dip this deep is certainly the period
-const FALLBACK  = 0.35;   // a shallow one still counts if nothing better exists
-let diff = null, norm = null, cachedTauMax = -1;
-
-/* `step` thins the buffer out before the search: a bass fundamental is 41 Hz,
-   and at 48 kHz one of its periods is over a thousand samples long, so a window
-   wide enough to hold two of them costs a fortune to compare. Reading every
-   fourth sample makes the period four times shorter in samples without losing
-   anything real - the low-pass ahead of this has already removed everything
-   the reduced rate could not carry. */
-function detectPitch(buf, sampleRate, minHz, maxHz, mayGuess, step){
-  step = step || 1;
-  const rate = sampleRate / step;
-  const len  = Math.floor(buf.length / step);
-  const tauMax = Math.min(Math.floor(rate / minHz), len >> 1);
-  const tauMin = Math.max(2, Math.floor(rate / maxHz));
-  /* More of the buffer averaged into every lag. The span in time is unchanged,
-     so the reading is no slower and no more biased, but each estimate rests on
-     half again as much evidence, which is what lets a faint note still resolve. */
-  const window = Math.min(3072, len - tauMax);
-  if (tauMax !== cachedTauMax){
-    diff = new Float32Array(tauMax + 2);
-    norm = new Float32Array(tauMax + 2);
-    cachedTauMax = tauMax;
-  }
-
-  for (let tau = 1; tau <= tauMax; tau++){
-    let sum = 0;
-    for (let i = 0; i < window; i++){
-      const d = buf[i * step] - buf[(i + tau) * step];
-      sum += d * d;
-    }
-    diff[tau] = sum;
-  }
-
-  let running = 0;
-  norm[0] = 1;
-  for (let tau = 1; tau <= tauMax; tau++){
-    running += diff[tau];
-    norm[tau] = running > 0 ? diff[tau] * tau / running : 1;
-  }
-
-  let tau = tauMin, found = -1;
-  for (; tau <= tauMax; tau++){
-    if (norm[tau] < THRESHOLD){
-      while (tau + 1 <= tauMax && norm[tau + 1] < norm[tau]) tau++;
-      found = tau; break;
-    }
-  }
-
-  /* Nothing cleared the threshold. A plain steel string has a shallow dip, not
-     an absent one, so falling back to the deepest dip is what makes the top two
-     strings readable at all. But on a dying note the deepest dip is only the
-     luckiest piece of noise, so the caller allows this while the signal is still
-     strong and forbids it as the note fades. */
-  if (found < 0 && mayGuess){
-    let best = tauMin;
-    for (let t = tauMin; t <= tauMax; t++) if (norm[t] < norm[best]) best = t;
-    if (norm[best] < FALLBACK) found = best;
-  }
-  if (found < 0) return null;
-
-  let period = found;
-  if (found > tauMin && found < tauMax){
-    const s0 = norm[found - 1], s1 = norm[found], s2 = norm[found + 1];
-    const denom = 2 * (2 * s1 - s2 - s0);
-    if (denom !== 0) period = found + (s2 - s0) / denom;
-  }
-  return { hz: rate / period, clarity: 1 - norm[found] };
-}
+/* The browser and every offline benchmark execute this exact detector. */
+const { detectPitch } = NepTunerPitch;
 
 /* ---------------------------------------------------------- all at once */
 /* Strum everything and read all six strings from one sound.
@@ -1172,7 +1109,7 @@ function stop(){
   cancelAnimationFrame(frame); frame = null;
   if (stream) stream.getTracks().forEach(tr => tr.stop());
   stream = null; analyser = null; rumble = null; shimmer = null;
-  lastHz = null; tracking = false; pitchHistory.length = 0; suspect.length = 0;
+  lastHz = null; chromaticMidi = null; tracking = false; pitchHistory.length = 0; suspect.length = 0;
   rmsSmooth = 0; attackAt = -1e9; lastLook = -1e9; noiseFloor = 0.02;
   lockedAt = null; wasLocked = false; steadyAt = null; easedCents = 0;
   wake.length = 0; resetPoly();
@@ -1230,7 +1167,7 @@ function loop(time){
     }
   }
   if (lastHz && time - lastSeen > HOLD_MS){
-    lastHz = null; tracking = false;
+    lastHz = null; chromaticMidi = null; tracking = false;
     pitchHistory.length = 0; suspect.length = 0;
   }
   paint(time);
@@ -1580,7 +1517,7 @@ function stepCustom(delta){
   arr[pinned] = next;
   writeCustomToUrl();
   saveSettings();
-  pitchHistory.length = 0; lastHz = null; suspect.length = 0; tracking = false; wake.length = 0;
+  pitchHistory.length = 0; lastHz = null; chromaticMidi = null; suspect.length = 0; tracking = false; wake.length = 0;
   applyAudioRange();
   applyNaming();
   pluck(next);                      // hear where it now sits
@@ -1683,7 +1620,7 @@ function renderIntonation(){
 
 /* ---------------------------------------------------------- reference tone */
 async function pluck(midi){
-  lastHz = null; tracking = false; pitchHistory.length = 0; suspect.length = 0;
+  lastHz = null; chromaticMidi = null; tracking = false; pitchHistory.length = 0; suspect.length = 0;
   steadyAt = null; wake.length = 0;
   const ac = await audio();
   ignoreInputUntil = Math.max(ignoreInputUntil, performance.now() + 1900);
@@ -1718,7 +1655,7 @@ function buildStrings(){
     b.append(document.createElement('em'), document.createElement('span'));
     b.addEventListener('click', () => {
       pinned = pinned === i ? null : i;          // tap it again to go back to automatic
-      pitchHistory.length = 0; lastHz = null; suspect.length = 0; tracking = false; wake.length = 0;
+      pitchHistory.length = 0; lastHz = null; chromaticMidi = null; suspect.length = 0; tracking = false; wake.length = 0;
       applyAudioRange();                         // the band closes in on that string
       pluck(Number(b.dataset.midi));             // and hear where it is meant to land
       if (hint.dataset.tone !== 'warn')
@@ -1858,7 +1795,7 @@ function selectTarget(value){
   strings.hidden = mode !== 'tuning';    // the strings mean nothing without a tuning
   document.getElementById('chromatic-scale').hidden = mode !== 'free';
   applyAudioRange();
-  pitchHistory.length = 0; lastHz = null; suspect.length = 0; tracking = false;   // never judge a new target
+  pitchHistory.length = 0; lastHz = null; chromaticMidi = null; suspect.length = 0; tracking = false;   // never judge a new target
   wake.length = 0;                       // and never trail a wake from another string
   resetIntonation(); resetPoly();
   applyNaming();
@@ -1901,7 +1838,7 @@ document.getElementById('instrument').addEventListener('change', e => {
   instIndex = Number(e.target.value) || 0;
   tuningIndex = 0; pinned = null; mode = 'tuning';
   shell.dataset.mode = mode; strings.hidden = false;
-  pitchHistory.length = 0; lastHz = null; suspect.length = 0; tracking = false; wake.length = 0;
+  pitchHistory.length = 0; lastHz = null; chromaticMidi = null; suspect.length = 0; tracking = false; wake.length = 0;
   buildStrings();
   clearCustomUrl();
   applyAudioRange();
@@ -1960,7 +1897,7 @@ go.addEventListener('click', async () => {
 document.getElementById('ref').addEventListener('input', e => {
   const v = parseFloat(e.target.value);
   if (v >= 392 && v <= 466){
-    a4 = v; applyAudioRange(); paint(performance.now()); saveSettings();
+    a4 = v; chromaticMidi = null; applyAudioRange(); paint(performance.now()); saveSettings();
   }
 });
 
