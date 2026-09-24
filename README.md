@@ -33,6 +33,34 @@ Tapping a string also plays its target pitch, so you can tune by ear. While that
 reference tone sounds, microphone analysis pauses so the phone cannot mistake
 its own speaker for the instrument.
 
+### Chord library — E Standard, DADGAD and Open C
+
+For a six-string guitar in **E Standard**, **DADGAD** or **Open C (CGCGCE)**, a separate **View**
+picker lets you switch between **Tuner** and **Chord library** without changing
+the selected tuning. Other presets, instruments, custom tunings and detector
+modes do not show this picker. The tuner remains the default on launch.
+
+- E Standard: eight basic positions — C, D, E, G, A, Am, Dm and Em.
+- DADGAD: twelve positions, including the four from the
+  [Paul Davids / Mike Dawes lesson](https://pauldavidsguitar.com/blog/play-solo-guitar-like-mike-dawes-complete-dadgad-guide/):
+  D5, high D and Dm shapes, and Em11. Additional positions cover Dsus4, low D
+  and Dm, Gadd9, A7sus4, Asus4, Cadd9 and Bm7.
+- Open C (C2 G2 C3 G3 C4 E4): twelve positions — C, D, F, G, Am, Dm, Em,
+  Cm, C7, Cmaj7, Csus4 and Cadd9. D, F and G use a full index-finger barre;
+  the minor positions include every note of their named triad.
+
+Original vector diagrams show finger numbers, muted/open strings, fret numbers
+and full or partial barres. Read from string 6 on the left to string 1 on the right,
+without a capo. The English and Spanish interfaces both retain letter chord
+symbols. Chord names describe these exact positions: leaving different drone
+strings open or moving a shape can change the name.
+
+Entering the library releases the microphone and wake lock, including a
+microphone permission granted after the view changes. Returning does not start
+listening automatically. The diagrams are bundled for offline use; lesson links
+open only when tapped. No third-party diagrams, video, audio or libraries are
+downloaded by this feature.
+
 ### Chromatic
 
 Reports the nearest of the twelve notes in any octave. The main readout names
@@ -265,6 +293,7 @@ being redistributed with NepTuner.
 | --- | --- |
 | `index.html` | app markup, styles, audio flow and drawing |
 | `pitch-engine.js` | shared monophonic pitch detector used by the app |
+| `chords.js` | curated chord data and original offline diagrams for E Standard, DADGAD and Open C |
 | `sw.js` | keeps the files on the device so the tuner runs offline |
 | `manifest.webmanifest` | name, colours, icon and orientation for install |
 | `icon.svg` | clean vector master for the app icon |
@@ -297,6 +326,6 @@ device is still serving its stored copy.
 
 ## What it deliberately does not do
 
-No chord library, no song catalogue, no lessons, no metronome, no account, no
-notifications, no ads. Those are what turned the tuner everybody used into the
-one everybody complains about. This one tunes.
+No song catalogue, embedded lessons, metronome, account, notifications or ads.
+The optional chord reference is limited to E Standard, DADGAD and Open C;
+the default remains the tuner, with no change to its pitch-detection algorithm.

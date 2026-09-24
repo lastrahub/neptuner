@@ -389,6 +389,47 @@
   .version{margin:14px 0 0; text-align:center; font-family:var(--mono);
            font-size:10.5px; letter-spacing:.1em; color:var(--muted)}
   .hint[data-tone="warn"]{color:var(--accent)}
+  /* A reference view, not a pitch-detection mode. */
+  .shell[data-view="chords"] > :is(#panel,#strings,#custom,#intonation,#tuner-action){display:none !important}
+  .chord-library{min-width:0}
+  .chord-library-heading,.chord-detail-heading{display:flex; align-items:baseline; justify-content:space-between; gap:12px}
+  .chord-library-heading h2{font-size:17px; font-weight:500; margin:0}
+  .chord-library-heading > span{font:12px var(--mono); color:var(--muted); white-space:nowrap}
+  .chord-guide{font-size:12.5px; line-height:1.5; color:var(--muted); margin:9px 0 16px}
+  .chord-group{margin:0 0 14px}
+  .chord-group h3{font-size:12px; font-weight:500; color:var(--muted); margin:0 0 8px}
+  .chord-list{display:grid; grid-template-columns:repeat(4,minmax(0,1fr)); gap:7px}
+  .chord-choice{min-width:0; min-height:48px; padding:8px 3px; display:flex; flex-direction:column;
+    align-items:center; gap:4px; border:1px solid var(--line); border-radius:8px; background:var(--bg);
+    color:var(--text); font:14px var(--sans); cursor:pointer; overflow-wrap:anywhere}
+  .chord-choice small{font:11px var(--mono); color:var(--muted)}
+  .chord-choice[aria-pressed="true"]{border-color:var(--green); background:var(--wash); color:var(--green)}
+  .chord-choice[aria-pressed="true"] small{color:var(--green)}
+  .chord-detail{background:var(--panel); border:1px solid var(--line); border-radius:12px; padding:17px 14px 14px}
+  .chord-detail h3{font-size:22px; font-weight:500; margin:0}
+  .chord-symbol{font:500 19px var(--mono); color:var(--green)}
+  .chord-position{margin:5px 0 0; color:var(--muted); font-size:12px}
+  .chord-diagram{width:100%; max-width:300px; margin:8px auto 0}
+  .chord-diagram svg{display:block; width:100%}
+  .chord-svg-label{fill:var(--muted); font:12px var(--mono)}
+  .chord-svg-mute{fill:var(--text); font:18px var(--mono)}
+  .chord-fret{stroke:var(--line); stroke-width:1.2}
+  .chord-string{stroke:var(--muted)}
+  .chord-nut{stroke:var(--text); stroke-width:4}
+  .chord-open{fill:none; stroke:var(--text); stroke-width:1.5}
+  .chord-dot{fill:var(--green)}
+  .chord-digit{fill:var(--bg); font:500 13px var(--sans)}
+  .chord-strum{text-align:center; margin:3px 0 12px; font-size:13px}
+  .chord-frets,.chord-notes{font:12px/1.65 var(--mono); margin:5px 0; overflow-wrap:anywhere}
+  .chord-notes{color:var(--muted)}
+  .chord-tip{font-size:13px; line-height:1.55; margin:12px 0}
+  .chord-legend{border-top:1px solid var(--line); margin-top:14px; padding-top:10px; color:var(--muted)}
+  .chord-legend p{font-size:12px; line-height:1.6; margin:3px 0; text-align:center}
+  .chord-source{display:block; min-height:44px; padding-top:14px; color:var(--muted); font-size:12px; line-height:1.5}
+  .chord-back{width:100%; min-height:44px; border:0; border-radius:8px; background:transparent;
+    color:var(--text); font:13px var(--sans); cursor:pointer; margin-top:10px}
+  .chord-offline{text-align:center; font:11px/1.5 var(--mono); color:var(--muted); margin:7px 0 0}
+  @media (pointer:coarse){#app-view{font-size:16px}}
   @media (prefers-reduced-motion: reduce){
     *,*::before,*::after{transition-duration:.01ms !important}
   }
@@ -435,6 +476,15 @@
     </label>
   </div>
 
+  <label class="field" id="chord-view-field" hidden>
+    <span id="lbl-view">Vista</span>
+    <span class="pick"><select id="app-view">
+      <option value="tuner" id="view-tuner">Afinador</option>
+      <option value="chords" id="view-chords">Biblioteca de acordes</option>
+    </select></span>
+  </label>
+  <section class="chord-library" id="chord-library" aria-label="Biblioteca de acordes" hidden></section>
+
   <section class="panel" id="panel">
     <div class="readout dim" id="readout">
       <div class="pitch"><b id="note">&mdash;</b><i><span id="octave"></span><small id="alt"></small></i></div>
@@ -473,7 +523,7 @@
     <button class="again" id="again" type="button"></button>
   </section>
 
-  <div class="action">
+  <div class="action" id="tuner-action">
     <button class="go" id="go" data-on="false">Start listening</button>
     <p class="hint" id="hint"></p>
   </div>
@@ -493,6 +543,7 @@
 </main>
 
 <script src="pitch-engine.js"></script>
+<script src="chords.js"></script>
 <script>
 /* ---------------------------------------------------------------- naming */
 const LETTERS = ['C','C\u266F','D','D\u266F','E','F','F\u266F','G','G\u266F','A','A\u266F','B'];
@@ -793,13 +844,16 @@ const I18N = {
 
 /* Shown at the foot of the page, and repeated as the CACHE name in sw.js so the
    two cannot drift apart: what the app says it is, is what is stored. */
-const VERSION = '0.27';
+const VERSION = '0.28';
 
 let lang = 'en';
 const t = key => (I18N[lang] && I18N[lang][key]) || I18N.en[key];
 
 /* ------------------------------------------------------------------ music */
 let mode = 'tuning';
+let appView = 'tuner';
+let listenToken = 0;
+const selectedChords = {standard:'d', dadgad:'d5', openc:'c'};
 let a4 = 440;
 let chromaticMidi = null;
 const CHROMATIC_SWITCH = .56;   // six cents of hysteresis around a semitone boundary
@@ -1089,11 +1143,19 @@ async function audio(){
 }
 
 async function listen(){
+  const token = ++listenToken;
   await audio();
+  if (token !== listenToken || appView !== 'tuner') return false;
   /* the browser's voice-call processing destroys pitch information - off */
-  stream = await navigator.mediaDevices.getUserMedia({
+  const requested = await navigator.mediaDevices.getUserMedia({
     audio:{ echoCancellation:false, noiseSuppression:false, autoGainControl:false, channelCount:1 }
   });
+  /* Close a late microphone grant if the library was opened while waiting. */
+  if (token !== listenToken || appView !== 'tuner'){
+    requested.getTracks().forEach(tr => tr.stop());
+    return false;
+  }
+  stream = requested;
   const source = ctx.createMediaStreamSource(stream);
   rumble = ctx.createBiquadFilter();                // handling noise, mains hum
   rumble.type = 'highpass';
@@ -1103,9 +1165,11 @@ async function listen(){
   source.connect(rumble).connect(shimmer).connect(analyser);
   applyAudioRange();
   frame = requestAnimationFrame(loop);
+  return true;
 }
 
 function stop(){
+  listenToken++;
   cancelAnimationFrame(frame); frame = null;
   if (stream) stream.getTracks().forEach(tr => tr.stop());
   stream = null; analyser = null; rumble = null; shimmer = null;
@@ -1307,6 +1371,7 @@ function paintPoly(time){
 }
 
 function paint(time){
+  if (appView === 'chords') return;
   /* every colour comes from the stylesheet, so the canvas follows the theme */
   const cs = getComputedStyle(document.body);
   const line  = cs.getPropertyValue('--line').trim();
@@ -1673,6 +1738,53 @@ function say(text, tone){
   announceStatus(text, 'hint:' + lang + ':' + text, performance.now(), tone === 'warn');
 }
 
+/* ------------------------------------------------------------ chord view */
+function availableChords(){
+  if (mode !== 'tuning' || tuningIndex < 0) return null;
+  return NepTunerChords.forTuning(inst().id, tuning().midi);
+}
+
+function renderChordLibrary(){
+  const lib = availableChords();
+  const returning = appView === 'chords' && !lib;
+  if (!lib) appView = 'tuner';
+  const es = lang === 'es';
+  document.getElementById('chord-view-field').hidden = !lib;
+  document.getElementById('lbl-view').textContent = es ? 'Vista' : 'View';
+  document.getElementById('view-tuner').textContent = es ? 'Afinador' : 'Tuner';
+  document.getElementById('view-chords').textContent = es ? 'Biblioteca de acordes' : 'Chord library';
+  document.getElementById('app-view').value = appView;
+  shell.dataset.view = appView;
+  const host = document.getElementById('chord-library');
+  host.hidden = appView !== 'chords';
+  host.setAttribute('aria-label', es ? 'Biblioteca de acordes' : 'Chord library');
+  if (host.hidden){ NepTunerChords.clear(host); if (returning) size(); return; }
+  NepTunerChords.render(host, lib, {
+    lang, selectedId:selectedChords[lib.id],
+    onSelect:id => {
+      selectedChords[lib.id] = id;
+      renderChordLibrary();
+      const chord = lib.shapes.find(item => item.id === id);
+      document.getElementById('status-live').textContent = NepTunerChords.title(chord, lang) + ', ' + lib.name;
+    },
+    onClose:() => { selectView('tuner'); document.getElementById('app-view').focus(); },
+  });
+}
+
+function selectView(value){
+  const next = value === 'chords' && availableChords() ? 'chords' : 'tuner';
+  if (next === 'chords'){
+    stop(); keepAwake(false);
+    go.dataset.on = 'false'; shell.dataset.listening = 'false'; go.textContent = t('start');
+  }
+  appView = next;
+  renderChordLibrary();
+  document.getElementById('status-live').textContent = appView === 'chords'
+    ? (lang === 'es' ? 'Biblioteca de acordes. Micrófono apagado.' : 'Chord library. Microphone off.')
+    : t('stopped');
+  if (appView === 'tuner') { size(); say(t('hintGuitar')); paint(performance.now()); }
+}
+
 /* Each option reads "Drop D  .  D A D G B E", so the picker documents itself
    and needs no translating - the names are names, the notes follow notation. */
 function renderTunings(){
@@ -1745,6 +1857,7 @@ function applyNaming(){
   renderTunings();
   renderInstruments();
   renderCustom();
+  renderChordLibrary();
   const refNote = names[9] + '4' + (naming === 'latin' ? ' (A4)' : '');
   document.getElementById('ref-label').textContent = refNote;
   document.getElementById('ref').setAttribute('aria-label', t('aRef').replace('{n}', names[9]));
@@ -1784,8 +1897,7 @@ function applyLanguage(){
   paint(performance.now());
 }
 
-/* The picker is the only mode control there is: 'free' or a tuning index.
-   One list, one decision - what am I tuning to. */
+/* Detector modes stay in the target picker; the reference view is independent. */
 function selectTarget(value){
   const special = value === 'free' || value === 'intonation' || value === 'poly';
   if (!special) tuningIndex = value === 'custom' ? -1 : (Number(value) || 0);
@@ -1863,6 +1975,7 @@ document.getElementById('reset-settings').addEventListener('click', () => {
   setTimeout(() => location.reload(), 350);
 });
 document.getElementById('tuning').addEventListener('change', e => selectTarget(e.target.value));
+document.getElementById('app-view').addEventListener('change', e => selectView(e.target.value));
 
 document.getElementById('lang').addEventListener('change', e => {
   lang = I18N[e.target.value] ? e.target.value : 'en';
@@ -1871,6 +1984,7 @@ document.getElementById('lang').addEventListener('change', e => {
 });
 
 go.addEventListener('click', async () => {
+  if (appView !== 'tuner') return;
   if (go.dataset.on === 'true'){
     stop(); keepAwake(false);
     go.dataset.on = 'false'; shell.dataset.listening = 'false';
@@ -1881,7 +1995,7 @@ go.addEventListener('click', async () => {
   }
   try {
     go.disabled = true; say(t('micWait'));
-    await listen();
+    if (!await listen()) return;
     go.dataset.on = 'true'; shell.dataset.listening = 'true';
     go.textContent = t('stop');
     keepAwake(true);
